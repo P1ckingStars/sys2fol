@@ -8,9 +8,11 @@ Proved.
 
 ## 2. The logic and the checker are fixed
 
-Pure first-order NBG as fol-zfc has it: no function symbols, no built-in equality (`eq` is a predicate), no schemas.
-Never add a rule, a normalizer or a decision procedure to the checker or the logic. Never edit fol-zfc-comb or
-fol-zfc-comb-lib from here. A system feature of the language is a theorem in the library, never a rule.
+Pure first-order NBG as fol-zfc has it: no function symbols, no built-in equality (`eq` is a predicate), no axiom
+schemas: a schema is proved once, its predicate letters open, and instantiated by `schema_inst`.
+Never add a rule, a normalizer or a decision procedure to the checker or the logic. Never edit fol-zfc-comb from here.
+In fol-zfc-comb-lib, edit only the systems library in `math/` (`DESIGN.md` §4) and the class machine in
+`src/machines/class`: never its checker, its foundation, the pinned ZF library, or other work in `math/`. A system feature of the language is a theorem in the library, never a rule.
 
 ## 3. Procedures live in machines
 
