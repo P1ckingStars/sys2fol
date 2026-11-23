@@ -25,10 +25,20 @@ nothing (ai-fol `DECODER.md` D22).
 Every spec construct has one meaning in NBG and one translation, or is refused at the input gate. Benchmarks catch
 bugs; they never scope, simplify or justify a design. Identities in the IR are typed handles, never names or strings.
 
-## 5. Design before code
+## 5. Production designs are the user's, decided after a test
 
-Write a design into `DESIGN.md` and get the user's agreement before building it. What a spec means and the systems
-theory in NBG are the user's decisions: propose, never decide.
+sys2fol is a commercial product. A production design is one a customer sees or relies on, or one other work is built on
+and costly to change: what a spec means, the language's constructs and syntax, the NBG representation the theorems rest
+on, the interfaces between components (machines, requests, claim shapes and names), and what is trusted. For each:
+
+1. Explain it: the problem, the options, their trade-offs and a recommendation.
+2. Check the user followed it: two or three questions on the explanation itself (what the choice commits to, why the
+   recommendation, what it costs and leaves open), asking only what making the choice needs, never an exercise. Check the
+   answers; explain again what an answer misses, and ask again.
+3. The user decides, and the decision goes into `DESIGN.md` as theirs.
+
+Never decide one, never build on one not yet decided, and never take agreement with a recommendation for a passed test.
+Any other design is written into `DESIGN.md` and agreed before it is built.
 
 ## 6. C++ for anything hot
 
@@ -37,3 +47,10 @@ Compilers, machines and certificate translation are C++ (Bazel), run under a mem
 ## 7. Writing
 
 Comments stay under 5% of a change's added lines. Docs state what holds now: delete what no longer holds, silently.
+
+## 8. Work in ZFC
+
+NBG is the foundation, but the work is in ZFC: classes stand only for the meta level (an operator such as `Fixedpt`'s
+h, a predicate a theorem is cited at, and the classes the class machine builds for those). Everything a claim is about
+is a set: systems, states, signals, relations, invariants, behaviours. Every quantifier in the definition of a notion
+ranges over sets. Over-using NBG is dangerous (`DESIGN.md` §9, decision 3).
