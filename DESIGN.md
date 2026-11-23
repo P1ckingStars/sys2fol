@@ -70,7 +70,7 @@ machine. fol-zfc-comb-lib's class machine (`src/machines/class`) writes these pr
 | Layer | Holds | State |
 |---|---|---|
 | lattice | Knaster–Tarski: `Fixedpt.lfp`, `gfp`, `induct`, `coinduct`, `gfp_unfold` | in `@zf//:ZF.Fixedpt` |
-| systems | the predicates of §3, the bridge, the invariance rule, simulation, composition, and the tuple lemmas they need (composing relations, the product S1×S2) | `math/systems/`: well-formedness, steps, `reach`, `bisim`, their bridges, the invariance rule, coinduction, simulation, traces and simulation's theorem into them checked; the rest to build |
+| systems | the predicates of §3, the bridge, the invariance rule, simulation, composition, and the tuple lemmas they need (composing relations, the product S1×S2) | `math/systems/`: well-formedness, steps, `reach`, `bisim`, Part A checked (§7); composition and the tuple lemmas beyond Part A's to build |
 | systems as values | "M is the system (S, A, B, step, Init)", predicates on M defined through the systems layer's, and each of its theorems restated once over M: for theorems over a varying number of systems, such as compositional refinement | to build |
 | generic | the same for every functor F, F a class | to build |
 | theory steps | one lemma per kind of solver step (Farkas for linear arithmetic, ...) | to build |
@@ -143,7 +143,9 @@ Part A, in the library, for a system `(S, A, B, step, Init)` (§3), in this orde
    `Sys.simulation_safety`.
 5. Traces (decisions 11, 12): `Sys.trace`, `Sys.refines`, `Sys.equivalent`; a simulation gives `Sys.refines`; `bisim`
    is a bisimulation, and bisimilar initial states give `Sys.equivalent`. Checked: the definitions, the bridge
-   `Sys.natural_nat`, and `Sys.simulation_refines`, by induction on the trace's length.
+   `Sys.natural_nat`, `Sys.simulation_refines` and `Sys.converse_simulation_refines`, each by induction on the
+   trace's length; `Sys.bisimilar_forth` and `Sys.bisimilar_back`, bisimilarity a bisimulation stated pointwise, as
+   a predicate is no set (decision 3); and `Sys.bisimilar_equivalent`.
 
 Each bridge comes right after its definition: it checks the predicate means what Knaster–Tarski means before anything
 is built on it. Steps 4 and 5 each need a class of a formula, from the class machine (its `DESIGN.md` §7): step 4's,
