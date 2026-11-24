@@ -1,0 +1,34 @@
+load("@fol_zfc//src/machines/compress:defs.bzl", "fol_compressed_proof")
+load("//build:prove.bzl", "sys_prove")
+
+package(default_visibility = ["//test:__subpackages__"])
+
+# The project "tests": each instance its specs cite is proved once, here (DESIGN.md §4, decision 22).
+NEEDS = [
+    "//test/crossing:crossing.needs",
+    "//test/queue:queue.needs",
+]
+
+sys_prove(
+    name = "instances_written",
+    srcs = NEEDS,
+    outs = [
+        "instances.fol.def",
+        "instances.fol.proof",
+    ],
+    arguments = [
+        "instances",
+        "--project",
+        "tests",
+        "{out0}",
+        "{out1}",
+    ] + ["$(location %s)" % n for n in NEEDS],
+    deps = ["@fol_zfc//math/systems:tuple_facts"],
+)
+
+fol_compressed_proof(
+    name = "instances",
+    header = "instances.fol.def",
+    proof = "instances.fol.proof",
+    deps = ["@fol_zfc//math/systems:tuple_facts"],
+)

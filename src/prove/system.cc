@@ -191,16 +191,6 @@ std::optional<RecP> as_rec(const FmP& f) {
     return r;
 }
 
-bool mentions(const FmP& f, const std::function<bool(const FmP&)>& p) {
-    if (p(f)) return true;
-    return (f->a && mentions(f->a, p)) || (f->b && mentions(f->b, p));
-}
-
-// The pairs <i, y> with <i + 1, y> in v: rest(v)'s, separated by the class machine.
-FmP shifted_pairs(const std::string& w, const std::string& v) {
-    return some("i", some("y", conj(atom("kpair", {"i", "y", w}), some("j", conj(atom("nsucc", {"i", "j"}), atom("pmem", {"j", "y", v}))))));
-}
-
 // Whether p occurs in f other than as a membership's right side, pmem(u, v, p) being one by pmem_def.
 bool misplaced(const FmP& f, const std::string& p) {
     if (f->k == Fm::Atom) {
@@ -1578,11 +1568,11 @@ private:
             H nz = nonzero(t, fs, rp->v, n);
             std::string m0 = fresh("_m");
             FmP ex = some(m0, atom("nsucc", {m0, n}));
-            H cases = t.mp(t.inst(t.p.use(lm_.zero_or_succ(sets_name(sets_, "nat.cases"))), {n}), {natn});
+            H cases = t.mp(t.inst(t.p.use(lm_.zero_or_succ()), {n}), {natn});
             H succ = t.cases(cases, [&](H z) { return t.p.bottom_elim(t.p.not_elim(nz, z), ex); }, [&](H e) { return e; });
             return t.obtain(succ, "m", [&](const std::string& m, H nsm) {
                 fs.add(nsm);
-                H re = t.mp(t.inst(t.p.use(lm_.rest_ex(sets_name(sets_, "seq.rest"))), {rp->v, n, m}), {tv, nsm, natn});
+                H re = t.mp(t.inst(t.p.use(lm_.rest_ex()), {rp->v, n, m}), {tv, nsm, natn});
                 return t.obtain(re, "r", [&](const std::string& r, H b) {
                     return open_fact(t, fs, b, [&] { return k(r); });
                 });
@@ -2718,13 +2708,6 @@ std::map<std::string, std::string> requests(const Program& p, const Claims& clai
         for (const std::string& v : free_vars(phi))
             if (v != "u") params.push_back(v);
         out[th.name] = request(phi, "u", params);
-    }
-    // A proof that builds rest(q) needs two sets of its own: rest's pairs, and the naturals that are 0 or a successor.
-    bool rest = false;
-    for (const auto& [name, f] : claims) rest = rest || mentions(f, [](const FmP& g) { return as_rest(g).has_value(); });
-    if (rest) {
-        out["seq.rest"] = request(shifted_pairs("w", "par_v"), "w", {"par_v"});
-        out["nat.cases"] = request(disj(atom("zero", {"w"}), some("m", atom("nsucc", {"m", "w"}))), "w", {});
     }
     return out;
 }

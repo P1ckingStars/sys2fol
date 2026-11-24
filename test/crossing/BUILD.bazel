@@ -102,6 +102,7 @@ sys_prove(
 
 sys_prove(
     name = "proofs",
+    visibility = ["//test:__pkg__"],
     srcs = [
         "crossing.sys",
         ":crossing.fol.def",
@@ -111,6 +112,7 @@ sys_prove(
         "crossing.lemmas.fol.def",
         "crossing.lemmas.fol.proof",
         "crossing.fol.proof",
+        "crossing.needs",
     ],
     arguments = [
         "prove",
@@ -122,10 +124,14 @@ sys_prove(
         "{out0}",
         "{out1}",
         "{out2}",
+        "--project",
+        "tests",
+        "--needs",
+        "{out3}",
     ],
     deps = [
-        "@fol_zfc//lib:base",
         "@fol_zfc//math/systems:reach",
+        "@fol_zfc//math/systems:tuple_facts",
     ],
 )
 
@@ -134,7 +140,10 @@ fol_compressed_proof(
     name = "lemmas",
     header = "crossing.lemmas.fol.def",
     proof = "crossing.lemmas.fol.proof",
-    deps = ["@fol_zfc//lib:base"],
+    deps = [
+        "//test:instances",
+        "@fol_zfc//math/systems:tuple_facts",
+    ],
 )
 
 fol_compressed_proof(
@@ -143,7 +152,9 @@ fol_compressed_proof(
     proof = "crossing.fol.proof",
     deps = [
         ":lemmas",
+        "//test:instances",
         "@fol_zfc//math/systems:reach",
+        "@fol_zfc//math/systems:tuple_facts",
     ] + [":" + s + "_set" for s in SETS],
 )
 
@@ -155,6 +166,8 @@ cc_test(
         "$(rootpath :proved)",
         "$(rootpath :crossing.lemmas.fol.def)",
         "$(rootpath :lemmas)",
+        "$(rootpath //test:instances.fol.def)",
+        "$(rootpath //test:instances)",
     ] + [x for s in SETS for x in [
         "$(rootpath :%s.fol.def)" % s,
         "$(rootpath :%s_set)" % s,
@@ -164,6 +177,8 @@ cc_test(
         ":crossing.lemmas.fol.def",
         ":lemmas",
         ":proved",
+        "//test:instances",
+        "//test:instances.fol.def",
     ] + [":%s.fol.def" % s for s in SETS] + [":%s_set" % s for s in SETS],
     deps = ["//src/tools:proved_main"],
 )

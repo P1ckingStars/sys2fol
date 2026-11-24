@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -11,11 +12,25 @@
 
 namespace sys2fol::prove {
 
-// The facts about numbers, records and the spec's steps its proofs cite, each a claim with its proof, written the first
-// time a proof asks for it. They are the spec's own, under its namespace: the library's equivalents wait for isa2fol.
+enum class Family { canon, is_canon, below, distinct, num_cong, at, at_fun, at_cong, rec_ex, index_cases };
+
+// A family of facts indexed by sizes, at its sizes: "at 4 3" in a project's lists (DESIGN.md §4).
+struct Instance {
+    Family family;
+    std::vector<uint64_t> sizes;
+    bool operator<(const Instance& o) const;
+};
+std::string base_name(const Instance& in);  // at_4_3
+std::string to_line(const Instance& in);
+Instance from_line(const std::string& line);
+
+// The facts about numbers and records the spec's proofs cite: the library's (math/systems tuple_facts, natural_facts)
+// when they hold for every spec, else instances, each written the first time a proof asks. With a project, an instance
+// is the project's: its specs' runs state and list it, and the project's run (prove_instances) proves it.
 class Lemmas {
 public:
-    Lemmas(std::string ns, std::map<std::string, FmP>& known) : ns_(std::move(ns)), known_(known) {}
+    Lemmas(std::string ns, std::map<std::string, FmP>& known, std::string project = "", bool prove_instances = false)
+        : ns_(std::move(ns)), known_(known), project_(std::move(project)), prove_instances_(prove_instances) {}
 
     std::string canon(uint64_t c);               // chain(c, z => z_c is the numeral c)
     std::string is_canon(uint64_t c);            // a numeral c is z_c of every chain
@@ -25,52 +40,55 @@ public:
     std::string at(size_t k, size_t i);          // a record's part i is its entry i
     std::string at_fun(size_t k, size_t i);      // ... and no other
     std::string at_cong(size_t i);               // equal records have equal parts
-    std::string pmem_cong1();
-    std::string tuple_cong2();
     std::string rec_ex(size_t k);                // every k values make a record
     std::string index_cases(size_t k);           // an index below z_k is one of z_0, ..., z_(k-1)
-    std::string pair_pow();                      // a pair of members of W is in Pow(Pow(W))
-    std::string tuple_pow();                     // a tuple with indices and entries in W is in Pow(Pow(Pow(W)))
-    // Natural numbers, from the translated ZF library through Sys.natural_nat.
-    std::string nat_cong();                      // eq(n, m) and n natural: m natural
-    std::string natural_succ();                  // n natural, nsucc(n, m): m natural
-    std::string natural_elem();                  // n natural, m in n: m natural
-    std::string natural_pred();                  // n natural, nsucc(m, n): m natural
-    std::string natural_zero();
-    std::string natural_index();
-    std::string nsucc_cong2();                   // eq(m, m2), nsucc(n, m): nsucc(n, m2)
-    // n natural: zero(n) or n a successor, from `cases`, the class machine's set { w | zero(w) or w a successor }.
-    std::string zero_or_succ(const std::string& cases);
-    std::string trichotomy();                    // m, c natural: m in c, m = c or c in m
-    std::string succ_le();                       // m < c, nsucc(m, s): s <= c
-    std::string pred_le();                       // nsucc(m, n), n <= c: m <= c
-    std::string zero_le();                       // zero(z), c natural: z <= c
-    // Sequences: a tuple has one length; equals carry into tuple and pmem.
-    std::string len_uniq();
-    std::string tuple_cong1();
-    std::string pmem_cong2();
-    std::string pmem_cong3();
-    std::string empty_tuple();                   // tuple(v, n), zero(n): zero(v)
-    std::string first_ex();                      // tuple(v, n), n natural and not 0: v has an entry at 0
-    // tuple(v, n), nsucc(m, n), n natural: v's rest, its entries shifted down by one, from `pairs`, the class machine's
-    // set { w in B | w = <i, y>, <i + 1, y> in v }.
-    std::string rest_ex(const std::string& pairs);
+
+    std::string pmem_cong1() const { return "g3_pmem_cong1"; }  // the foundation's
+    std::string pmem_cong2() const { return "Sys.pmem_cong2"; }
+    std::string pmem_cong3() const { return "Sys.pmem_cong3"; }
+    std::string tuple_cong1() const { return "Sys.tuple_cong1"; }
+    std::string tuple_cong2() const { return "Sys.tuple_cong2"; }
+    std::string nsucc_cong2() const { return "Sys.nsucc_cong2"; }
+    std::string len_uniq() const { return "Sys.tuple_length_unique"; }
+    std::string empty_tuple() const { return "Sys.tuple_length_zero"; }
+    std::string pair_pow() const { return "Sys.kpair_pow"; }
+    std::string tuple_pow() const { return "Sys.tuple_pow"; }
+    std::string nat_cong() const { return "Sys.natural_cong"; }
+    std::string natural_zero() const { return "Sys.natural_zero"; }
+    std::string natural_succ() const { return "Sys.natural_succ"; }
+    std::string natural_elem() const { return "Sys.natural_elem"; }
+    std::string natural_pred() const { return "Sys.natural_pred"; }
+    std::string natural_index() const { return "Sys.natural_index"; }
+    std::string zero_or_succ() const { return "Sys.natural_zero_or_succ"; }
+    std::string trichotomy() const { return "Sys.natural_trichotomy"; }
+    std::string succ_le() const { return "Sys.natural_succ_le"; }
+    std::string pred_le() const { return "Sys.natural_pred_le"; }
+    std::string zero_le() const { return "Sys.natural_zero_le"; }
+    std::string first_ex() const { return "Sys.tuple_first"; }
+    std::string rest_ex() const { return "Sys.tuple_rest"; }
 
     // A fact about one of the spec's own definitions, proved by `proof`, made the first time a proof asks for it.
     std::string own(const std::string& base, const std::function<FmP()>& statement, const std::function<H(Tac&)>& proof) {
-        return make(base, statement, proof);
+        return make(ns_ + ".lemma." + base, statement, proof);
     }
 
+    std::string prove_instance(const Instance& in);
+    const std::set<Instance>& needs() const { return needs_; }
     std::string header() const;
     const std::string& proofs() const { return proofs_; }
 
 private:
     std::string ns_;
     std::map<std::string, FmP>& known_;
+    std::string project_;
+    bool prove_instances_;
+    std::set<Instance> needs_;
     std::map<std::string, bool> made_;
     std::vector<std::pair<std::string, FmP>> claims_;
     std::string proofs_;
 
+    std::string instance(const Instance& in, const std::function<FmP()>& statement,
+                         const std::function<H(Tac&)>& proof);
     std::string make(const std::string& name, const std::function<FmP()>& statement,
                      const std::function<H(Tac&)>& proof);
 };

@@ -67,10 +67,27 @@ for Φ's class, from a proof of its existence. Class existence is a schema in NB
 (isa2fol `docs/FOUNDATION.md` §3); a library definition with the machine as parameters proves it once for every
 machine. fol-zfc-comb-lib's class machine (`src/machines/class`) writes these proofs.
 
+A fact a machine's proofs cite lives in the library too when its statement holds whatever the spec is: proved once and
+cited, never proved again (decision 21). A fact indexed by a size, a record's arity or a numeral, is a different
+sentence at each size, since a first-order sentence quantifies a fixed number of values. The size-free tuple theory is
+in base, and each instance is written by the machine whose proof needs it, the first time it does, and cited from then
+on.
+
+A project lists its specs, and each instance they cite is proved once for the project (decision 22). Each spec's run of
+sysprove (`--project P --needs OUT`) states the instances its proofs cite, names each
+`P.instance.<family>_<sizes>`, and lists them by family and sizes, one per line (`at 4 3`), without proving them. The
+project's run (`sysprove instances`) proves the union of the lists, each instance once, in a file the compression
+machine shortens and `proof_checker` checks once; each spec's checks load it. An edit to a spec that needs no new
+instance reruns only that spec's generation and checks; one that does reruns the project's file and every spec's
+checks, about 2 seconds each, nearly all of it loading. `test/BUILD.bazel` makes `BoundedQueue` and `Crossing` one
+project, `tests`: 31 instances in 2,083 lines (38 KB), where each spec proved its own, 1,646 and 1,710 lines, 15 of them
+alike; their lemma files, now each its step typing alone, and the project's file come to 3,958 lines where the two
+lemma files were 5,231. A spec in no project proves its own instances in its lemma file.
+
 | Layer | Holds | State |
 |---|---|---|
 | lattice | Knaster–Tarski: `Fixedpt.lfp`, `gfp`, `induct`, `coinduct`, `gfp_unfold` | in `@zf//:ZF.Fixedpt` |
-| systems | the predicates of §3, the bridge, the invariance rule, simulation, composition, and the tuple lemmas they need (composing relations, the product S1×S2) | `math/systems/`: well-formedness, steps, `reach`, `bisim`, Part A checked (§7); composition and the tuple lemmas beyond Part A's to build |
+| systems | the predicates of §3, the bridge, the invariance rule, simulation, composition, and the tuple lemmas they need (composing relations, the product S1×S2) | `math/systems/`: well-formedness, steps, `reach`, `bisim`, Part A checked (§7), and the facts sysprove's proofs cite, `tuple_facts` and `natural_facts` (decision 21); composition and the tuple lemmas beyond Part A's to build |
 | systems as values | "M is the system (S, A, B, step, Init)", predicates on M defined through the systems layer's, and each of its theorems restated once over M: for theorems over a varying number of systems, such as compositional refinement | to build |
 | circuits | bits as sets, tuples of bits, the set of all states, and the reduction of obligations to SAT: the theory rtl2fol's claims cite (rtl2fol `DESIGN.md`, decision 2) | to build |
 | generic | the same for every functor F, F a class | to build |
@@ -205,13 +222,13 @@ entries, each encoded formula evaluated and each value's numeral carried by equa
 `Sys.invariance` with `{ s in Crossing.State | not (s.ns = green and s.ew = green) }` its own invariant, citing
 `Crossing_wellformed` for a step's target state. A false theorem gets no proof: for `reachable(Crossing) ⊆ { s in
 Crossing.State | s.ns = green }`, sysprove answers that a step leaves the property. The facts about numerals and records
-the proofs cite are proved in the spec's own part (`crossing.lemma.*`): decision 18 sends library theorems to the isa2fol
-evaluation first. With them, 32 lemmas in all, is each instance's step typing: every step of its relation a tuple of a
-state, an input, an output and a state in their sets, proved once by cases over the rules and cited by the system's
-well-formedness and by its step relation's set. Sizes, as checked, through the compression machine (decision 20):
-3,094 proof lines (79 KB) for the claims, 2,728 (57 KB) for the lemmas, and 3,473 (97 KB) from the class machine, 2,215
-of them the step relation's set. For the user to decide: a theorem's proof
-citing the system's well-formedness, proved first; the lemmas living with each spec until the library holds them.
+the proofs cite are the library's when they hold for every spec (decision 21), and the project's instances, 26 of
+`tests`' 31, when indexed by a size (decision 22). The spec's one lemma, `crossing.lemma.Crossing_step_typed`, is its
+system's step typing: every step of its relation a tuple of a state, an input, an output and a state in their sets,
+proved once by cases over the rules and cited by the system's well-formedness and by its step relation's set. Sizes, as
+checked, through the compression machine (decision 20): 3,087 proof lines (78 KB) for the claims, 576 (18 KB) for the
+lemma, and 3,473 (97 KB) from the class machine, 2,215 of them the step relation's set. For the user to decide: a theorem's proof citing the system's
+well-formedness, proved first.
 
 Step 3's statements: `sysc` and `sysrender` carry `BoundedQueue` and `queue_within_capacity` (`test/queue`). Its seven
 claims compile in fol-zfc and read back as the spec, token for token; thirteen mistakes seeded into the new encodings
@@ -227,8 +244,8 @@ instance to its own parameters, in order, and only so yet. The renderer takes th
 and its spelling of a reversed comparison (`a ≥ b` for `b ≤ a`) as hints, where they fit the claim. L3's `none` for an
 output a rule does not mention is not built: `sysc` refuses such a rule.
 
-Step 3's proofs: all seven of `BoundedQueue`'s claims are on `proof_checker`'s Proved list, with its 44 lemmas and eight
-sets (`//test/queue:proved_test` reads every part's list, as Crossing's does). A system with parameters is proved over
+Step 3's proofs: all seven of `BoundedQueue`'s claims are on `proof_checker`'s Proved list, with its step typing, the 20
+of `tests`' instances it cites, and six sets (`//test/queue:proved_test` reads every part's list, as Crossing's does). A system with parameters is proved over
 symbols, not by cases: each step's parts are typed by how its rule builds each value; every state and input has a step,
 by excluded middle on each rule's guard in turn, the first that holds firing, its values built and its step proved by
 matching against the steps at hand, and when none holds, cases on the order of the naturals at hand and on the guards'
@@ -237,13 +254,14 @@ members, U(i+1) = U(i) ∪ Pow(Pow(Pow(U(i)))), each value at its type's depth. 
 own set: a kept queue keeps its length, an append under `length < capacity` stays at most capacity, a rest too, and
 `[]` starts so. `rest(q)` and `first(q)` have a value only for a nonempty q, so a rule using them has no step on an
 empty q, which another rule must cover; the proof route takes `length(q) ≠ 0` from the rule's guard, and does not yet
-split on emptiness without one. `rest` takes two sets of its own from the class machine, its shifted pairs (a
-484-line proof) and the naturals that are 0 or a successor, for the length's predecessor, where append has
-`snoc_EX`. The facts about natural numbers come from the translated ZF library through `Sys.natural_nat`. The class
+split on emptiness without one. `rest` is the library's `Sys.tuple_rest`, whose proof takes two sets from the class
+machine, the shifted pairs and the naturals that are 0 or a successor, for the length's predecessor, where append has
+`snoc_EX`. The facts about natural numbers are the library's `natural_facts`, from the translated ZF library through
+`Sys.natural_nat`. The class
 machine takes a parameter only on a membership's right side, `pmem`'s third place being one: elsewhere, as `capacity`
 in `capacity ≤ length(queue)`, the request names a variable with the parameter's members, which the proof returns to
-the parameter by extensionality. Sizes, as checked: 5,126 proof lines (161 KB) for the claims, 4,867 (103 KB) for the
-lemmas, and 8,590 (281 KB) from the class machine, 5,618 of them the step relation's set, which `proof_checker` checks
+the parameter by extensionality. Sizes, as checked: 5,105 proof lines (160 KB) for the claims, 1,299 (39 KB) for the
+step typing, and 7,884 (268 KB) from the class machine, 5,618 of them the step relation's set, which `proof_checker` checks
 in 1.9 seconds, nearly all of it loading the libraries. `rest`
 and `first` with no value on `[]` is the user's decision (`LANGUAGE.md`, L4 in part).
 
@@ -276,6 +294,8 @@ LRAT's RAT steps.
 | 18 | The statement compiler and the renderer, which are trusted, are hand-written C++ in this repository, small enough to review, with no parser or IR framework in them; the round-trip test checks them. Frameworks serve only untrusted parts: slang or Yosys for importing RTL, tree-sitter and a language server for editors, solvers as machines. Isabelle/ZF with isa2fol is evaluated as the way to prove library theorems before any is written by hand | The user's choice (2026-11-23), after the frameworks were laid out: a framework in the statement compiler puts its code in what is trusted, since a bug there changes a claim's meaning while every proof still checks; Clang, Swift, Rust and Go hand-write their parsers too. Untrusted output is checked, so any framework is safe there. isa2fol's proofs are checked by fol-zfc, so Isabelle's automation adds no trust; its cost is a bridge from each Isabelle notion to ours. |
 | 19 | The class machine reads a defined predicate through a row, a class proved once, as it reads `zero`, `nsucc` and `snoc`, and unfolds a predicate that has none. The foundation's predicates' rows live in the class machine's package, made by the machine in its build; each library's rows live with that library; a predicate with no row gets one made inside the request, and a row is found by its statement (the user, 2026-11-23, after the machine's output was measured; the class machine's `DESIGN.md`, decisions 3 to 5) | 95% of the machine's lines came from unfolding `tuple` (68%) and `pmem` (27%) at every occurrence; rows cut an estimated 16× of all its lines, and the machine's own run takes seconds where checking its output took 25 minutes. |
 | 20 | Proof compression is a standalone machine, and every proof a machine writes goes through it before `proof_checker`: fol-zfc-comb-lib's `src/machines/compress`, beside the class machine, on the checker's public replay. It drops the steps no kept step reads, reads each held fact from the step that set it, and writes short names and only the parentheses needed. The class machine runs it in process; sysprove's proofs go through `fol_compressed_proof` (the user, 2026-11-24) | A proof's size is what the checker parses and what a customer stores and checks again. One machine serves every writer, rtl2fol's included, where each writer would otherwise write its own pass; inside fol-zfc-comb-lib the class machine reaches it, and the checker's tree stays as it is. It is untrusted: each rewritten block is checked before it is kept. |
+| 21 | A fact whose statement holds whatever the spec is lives in the systems library, proved once, and every proof a machine writes cites it, never proving it again. The 23 sysprove proved in each spec are `math/systems`' `tuple_facts` and `natural_facts`, with the proofs sysprove wrote, shortened by the compression machine, and base's `g3_pmem_cong1`. A fact whose proof depends on the task, one indexed by a record's arity or a numeral, belongs to the proof generation, which writes it the first time a proof needs it and cites it from then on, so that it is proved once (the user, 2026-11-24) | Every later use of a machine cites such a fact instead of proving it on the instance, as programs use C++'s standard library. These facts were 35% of what sysprove wrote per spec, and 20 were proved identically in both specs. A first-order sentence quantifies a fixed number of values, so a fact over a record of k fields is one sentence per k: base holds the size-free tuple theory, and an instance at a size is part of the proof that needs it. No proof was written by hand: sysprove wrote them, and those on the natural numbers rest on ZF's through `Sys.natural_nat` (decision 18). |
+| 22 | The instances a project's specs cite are proved once for the project: each spec's sysprove run states and lists the instances it cites, and the project's run proves their union in one file, which every spec's checks load; a spec in no project proves its own (the user, 2026-11-24, after the design was written into §4) | Decision 21 has the proof generation cache what it proves so that nothing is proved twice, and specs in one build share sizes: `BoundedQueue` and `Crossing` proved 15 instances alike. Per-spec runs keep each spec's generation incremental and parallel, where one run for the whole project would regenerate every spec on any edit; Bazel cannot declare a target per instance, since only sysprove's run learns which instances a spec needs. |
 
 ## 10. Open, for the user
 
