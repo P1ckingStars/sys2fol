@@ -34,7 +34,8 @@ on, the interfaces between components (machines, requests, claim shapes and name
 1. Explain it: the problem, the options, their trade-offs and a recommendation.
 2. Check the user followed it: two or three questions on the explanation itself (what the choice commits to, why the
    recommendation, what it costs and leaves open), asking only what making the choice needs, never an exercise. Check the
-   answers; explain again what an answer misses, and ask again.
+   answers and explain what an answer misses; ask again only when the gap bears on the choice, never the same question
+   twice. The explanation's weight is on the trade-offs.
 3. The user decides, and the decision goes into `DESIGN.md` as theirs.
 
 Never decide one, never build on one not yet decided, and never take agreement with a recommendation for a passed test.
