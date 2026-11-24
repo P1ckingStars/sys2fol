@@ -8,7 +8,7 @@ specifications.
 ## 1. Pipeline
 
 A spec and its proof sketch → the statement compiler → a fol-zfc claim; the proof compiler → obligations → machines →
-fol-zfc steps → `proof_checker`.
+fol-zfc steps → the compression machine → `proof_checker`.
 
 ## 2. Two compilers
 
@@ -72,6 +72,7 @@ machine. fol-zfc-comb-lib's class machine (`src/machines/class`) writes these pr
 | lattice | Knaster–Tarski: `Fixedpt.lfp`, `gfp`, `induct`, `coinduct`, `gfp_unfold` | in `@zf//:ZF.Fixedpt` |
 | systems | the predicates of §3, the bridge, the invariance rule, simulation, composition, and the tuple lemmas they need (composing relations, the product S1×S2) | `math/systems/`: well-formedness, steps, `reach`, `bisim`, Part A checked (§7); composition and the tuple lemmas beyond Part A's to build |
 | systems as values | "M is the system (S, A, B, step, Init)", predicates on M defined through the systems layer's, and each of its theorems restated once over M: for theorems over a varying number of systems, such as compositional refinement | to build |
+| circuits | bits as sets, tuples of bits, the set of all states, and the reduction of obligations to SAT: the theory rtl2fol's claims cite (rtl2fol `DESIGN.md`, decision 2) | to build |
 | generic | the same for every functor F, F a class | to build |
 | theory steps | one lemma per kind of solver step (Farkas for linear arithmetic, ...) | to build |
 
@@ -106,7 +107,10 @@ The systems layer's predicates (decisions 7 and 8, §9):
 
 ## 5. Machines
 
-As in ai-fol (`DECODER.md` D22): a machine takes a goal and offers one next state with the fol-zfc steps that reach it.
+A machine takes a closed obligation, such as `∀x⃗. (Γ → G)`, and answers with one of four (decision 13, §9): proved, a
+claim and its fol-zfc proof; refuted, a counterexample over the atoms it sees, possibly spurious; refused, with the
+reason; or out of time or memory. A caller cites a proved claim, instantiating it at its variables and discharging it
+with its hypotheses; ai-fol's search reaches every machine through one adapter that writes those steps (D22).
 
 | Machine | Offers | Steps from |
 |---|---|---|
@@ -117,16 +121,18 @@ As in ai-fol (`DECODER.md` D22): a machine takes a goal and offers one next stat
 | explicit-state explorer | a counterexample on rich data | the trace, checked by evaluation |
 | AI (ai-fol) | an invariant, a refinement mapping, a lemma split, a citation | whatever the obligations it creates close with |
 | class (fol-zfc-comb-lib) | a class, or a set, defined by a formula | its class-existence proof: built, CLASS, EXACT, VAL and SET |
+| compression (fol-zfc-comb-lib) | a proof file, smaller | the file's own steps: those a kept step reads, renamed (decision 20) |
 
 The user writes the spec, its structure, key invariants and citations; AI proposes what is missing; solvers close what
 they decide; the checker accepts only steps.
 
 ## 6. From TLA+
 
-Taken as semantics, not syntax: stuttering invariance, so an implementation with more steps than its spec can refine
-it; implementation as implication; fairness conjoined without constraining safety (machine closure); refinement
-mappings as the witness of a refinement. Started from its gaps: composition with interfaces, types, and links to
-implementations (RTL through rtl2fol, code).
+Taken as semantics, not syntax: an implementation with more steps than its spec can refine it, here by a link's map
+hiding steps (`LANGUAGE.md` L2) rather than by stuttering invariance, which would lose cycle-accurate claims;
+implementation as implication; fairness conjoined without constraining safety (machine closure); refinement mappings as
+the witness of a refinement. Started from its gaps: composition with interfaces, types, and links to implementations
+(RTL through rtl2fol, code).
 
 ## 7. First milestone
 
@@ -156,9 +162,94 @@ built by `pairing`, its three obligations closed through SAT and LRAT.
 
 Every claim on `proof_checker`'s Proved list.
 
+Part B waits for the spec language, designed first (decision 15).
+
+Part C, the language's first checked claims, comes before L5 to L9 are designed (the user, 2026-11-23: too much is on
+paper). It builds `LANGUAGE.md`'s decided constructs, and as experiments its proposals L4 (types are sets), P4
+(aliases) and P5 (the core); what it settles goes back to the user to decide. C++ in this repository, on
+fol-zfc-comb-lib's checker and library:
+
+1. The statement compiler and the renderer, on the smallest spec that uses every core construct: two lights at a
+   crossing, never both green. Its claim: the system is well formed, and every reachable state is safe. The renderer
+   prints the claim back from fol-zfc, and a round-trip test compares the print with the source.
+2. The proof compiler's first route: the invariance rule, `Sys.invariance`, each obligation closed by cases over finite
+   sets, and the sets from the class machine. Checked: the claim on the Proved list.
+3. `BoundedQueue` and `queue_within_capacity`: sequences, natural numbers and an abstract type.
+
+Step 1's compiler is `sysc` (`src/lang`, `src/tools`), with the library's first part in `library/systems.sys`; the
+Crossing's seven claims compile in fol-zfc (`//test/crossing:claims`). Its encodings, for the user to decide: a claim
+about a system quantifies over the system's sets, each characterized by its members, and one claim per set states that
+it exists; an enum's cases are the numbers 0, 1, …; a record is a tuple written as `Sys.tuple2` and `Sys.tuple4` write
+theirs, and the empty record is 0; a step relation is bounded only by its state and input sets, so `Sys.wellformed`
+owes that every rule stays in its types; `extern` names a library predicate in the library's own text.
+
+Step 1's renderer is `sysrender` (`src/render`). It links fol-zfc's parser and not `sysc`'s writer: it reads each claim
+as fol-zfc parses it and inverts the writer's encoding pattern by pattern, refusing any other shape. Instances and
+theorems print from the claims, each alias folded back only where its plain body, holes filled, is what the claim says;
+definitions print from the source, checked against the notation they print in (an enum's cases are its positions). A
+claim has no labels for record parts and does not say which of two equal sets it names (`bit` and `Light` are both
+`0 ..< 2`), so those come from the source as hints, taken only where they fit the claim. Three round trips compare a
+print with its source token by token: the Crossing, `test/constructs` (every construct the writer writes; its theorems
+are not to be proved) and the library's definitions. Twenty mistakes seeded into the writer and the resolver each fail
+one. Its choices, for the user to decide: names from the source as hints; where two spellings write one formula, the
+print takes one (`all x in A: x in B` prints as `A ⊆ B`, `not x = y` as `x ≠ y`), so a spec in the other spelling
+reads back changed in form.
+
+Step 2's proof compiler is `sysprove` (`src/prove`): all seven of the Crossing's claims are on `proof_checker`'s Proved
+list (`//test/crossing:proved`, checked by `proved_test`). It writes plain steps through an engine that computes each
+step's formula and scopes as the checker does, so a misused step fails as it is written. The sets come from the class
+machine as SET claims: `initial` and the theorem's invariant cut from `State`; `State`, `Input` and the step relation
+from Pow(Pow(Pow(W))), W a numeral or a union of the indices and the component sets, since a tuple with its indices and
+entries in W lies there; `Output`, {0}, by pairing. Every other fact is proved by cases over the values of the records'
+entries, each encoded formula evaluated and each value's numeral carried by equalities. `crossing_safe` follows by
+`Sys.invariance` with `{ s in Crossing.State | not (s.ns = green and s.ew = green) }` its own invariant, citing
+`Crossing_wellformed` for a step's target state. A false theorem gets no proof: for `reachable(Crossing) ⊆ { s in
+Crossing.State | s.ns = green }`, sysprove answers that a step leaves the property. The facts about numerals and records
+the proofs cite are proved in the spec's own part (`crossing.lemma.*`): decision 18 sends library theorems to the isa2fol
+evaluation first. With them, 32 lemmas in all, is each instance's step typing: every step of its relation a tuple of a
+state, an input, an output and a state in their sets, proved once by cases over the rules and cited by the system's
+well-formedness and by its step relation's set. Sizes, as checked, through the compression machine (decision 20):
+3,094 proof lines (79 KB) for the claims, 2,728 (57 KB) for the lemmas, and 3,473 (97 KB) from the class machine, 2,215
+of them the step relation's set. For the user to decide: a theorem's proof
+citing the system's well-formedness, proved first; the lemmas living with each spec until the library holds them.
+
+Step 3's statements: `sysc` and `sysrender` carry `BoundedQueue` and `queue_within_capacity` (`test/queue`). Its seven
+claims compile in fol-zfc and read back as the spec, token for token; thirteen mistakes seeded into the new encodings
+each fail the round trip or stop `sysc`. Its encodings, for the user to decide with L4: a module's and a theorem's
+parameters are quantified first in each of their claims, one whose type a library predicate gives (`extern type nat =
+"Sys.natural"`) with that predicate as a hypothesis; `sequence of T` is an index tuple of a natural length with its
+entries in T (decision 12), `[]` the empty tuple and `[x]` a tuple of one; `length(q)` is the n with tuple(q, n),
+`first(q)` the entry at index 0, `rest(q)` the tuple with every entry one index down, none for `[]`, and `q ++ [x]` is
+snoc; `<` and `≤` on natural numbers are ∈ and ∈ or =; an enum whose cases carry fields is the set of pairs ⟨case
+number, record of its fields⟩, its case names global; a rule's pattern binds a field's value by an existential over the
+field's type, around the whole rule; `length`, `first` and `rest` are built into the compiler. A theorem applies an
+instance to its own parameters, in order, and only so yet. The renderer takes the source's order of a rule's equations
+and its spelling of a reversed comparison (`a ≥ b` for `b ≤ a`) as hints, where they fit the claim. L3's `none` for an
+output a rule does not mention is not built: `sysc` refuses such a rule.
+
+Step 3's proofs: all seven of `BoundedQueue`'s claims are on `proof_checker`'s Proved list, with its 44 lemmas and eight
+sets (`//test/queue:proved_test` reads every part's list, as Crossing's does). A system with parameters is proved over
+symbols, not by cases: each step's parts are typed by how its rule builds each value; every state and input has a step,
+by excluded middle on each rule's guard in turn, the first that holds firing, its values built and its step proved by
+matching against the steps at hand, and when none holds, cases on the order of the naturals at hand and on the guards'
+negated parts make one hold; each set is cut from a tower over the naturals (ZF's nat) and the type parameters'
+members, U(i+1) = U(i) ∪ Pow(Pow(Pow(U(i)))), each value at its type's depth. The theorem is the invariance rule at its
+own set: a kept queue keeps its length, an append under `length < capacity` stays at most capacity, a rest too, and
+`[]` starts so. `rest(q)` and `first(q)` have a value only for a nonempty q, so a rule using them has no step on an
+empty q, which another rule must cover; the proof route takes `length(q) ≠ 0` from the rule's guard, and does not yet
+split on emptiness without one. `rest` takes two sets of its own from the class machine, its shifted pairs (a
+484-line proof) and the naturals that are 0 or a successor, for the length's predecessor, where append has
+`snoc_EX`. The facts about natural numbers come from the translated ZF library through `Sys.natural_nat`. The class
+machine takes a parameter only on a membership's right side, `pmem`'s third place being one: elsewhere, as `capacity`
+in `capacity ≤ length(queue)`, the request names a variable with the parameter's members, which the proof returns to
+the parameter by extensionality. Sizes, as checked: 5,126 proof lines (161 KB) for the claims, 4,867 (103 KB) for the
+lemmas, and 8,590 (281 KB) from the class machine, 5,618 of them the step relation's set, which `proof_checker` checks
+in 1.9 seconds, nearly all of it loading the libraries. `rest`
+and `first` with no value on `[]` is the user's decision (`LANGUAGE.md`, L4 in part).
+
 ## 8. Not now
 
-The language's syntax, liveness and fairness, the generic layer, up-to techniques, SMT theory steps beyond bit-vectors,
+Liveness and fairness, the generic layer, up-to techniques, SMT theory steps beyond bit-vectors,
 LRAT's RAT steps.
 
 ## 9. Decided by the user
@@ -174,22 +265,25 @@ LRAT's RAT steps.
 | 7 | Each predicate takes only the parts of a system its definition uses (§3) | Shorter claims and citations, each predicate showing what it depends on, and a part added to systems changes only the predicates that use it. What is given up is a unified convention: each predicate has its own arguments, which the statement compiler's one translation per construct writes once. |
 | 8 | A step is a predicate of its own, `step` containing ⟨s, a, b, s′⟩, defined once by the tuple encoding (§3) | Shorter extraction, and the encoding in one place. Its cost is the lemmas that build and take apart a step, which base has only for tuples in general, and a congruence lemma. A tuple is a function in base's sense, so function properties are there if needed. |
 | 9 | A bisimulation relates states of two systems, `R ⊆ S1×S2`; one system is the case of the same system twice (§3) | Within one system, comparing an implementation with its spec needs their disjoint union built, and written into every such claim; between two, the proofs are longer, through tuples, but the claim is cleaner to use. |
-| 10 | Refinement's witness is, for now, the lock-step forward simulation (§3); stuttering and backward simulation come later as flavours of their own, each with a theorem into one meaning of "refines", decided with §10 | It guarantees the same input/output pairs, and reachability needs the initial states related. It is strict: an implementation taking more steps per spec step, or choosing later than its spec, needs another flavour. The trusted part stays small: one meaning, the flavours untrusted proof material. |
+| 10 | Refinement's witness is a kind of simulation, each kind with a checked theorem into the one meaning of "refines": first the lock-step forward simulation (§3), then the forward family's path simulation and further families, as `LANGUAGE.md` L2 sets out | It guarantees the same input/output pairs, and reachability needs the initial states related. Lock-step alone is strict: an implementation taking more steps per spec step, or choosing later than its spec, needs another kind. The trusted part stays small: one meaning, the kinds untrusted proof material. |
 | 11 | "Refines" is inclusion of traces and "equivalent" equality of traces: a trace the finite sequence of input/output pairs a run from an initial state produces. A state's behaviour is its set of traces. Liveness later, as a meaning of its own | Traces have wider acceptance: every flavour of simulation proves them, where branching meanings accept only bisimilarity and forward simulation. Two systems with the same traces are equivalent even when one chooses earlier; no input/output sequence shows that difference. Finite traces cover safety and leave liveness for later. |
 | 12 | A trace and a run are fol-zfc tuples indexed by a natural number n: a trace's entries the 2-tuples ⟨a, b⟩, a run's its n+1 states; the sequence lemmas ours, by induction on n | ZF's lists nest: `Cons` takes one extraction per entry, in the style of a typed prover, where an index tuple reaches any entry in one lookup and keeps one encoding with states, steps and relations. |
+| 13 | Every machine shares one interface: a closed obligation in; proved (a claim and its proof), refuted (a counterexample over its atoms), refused (a reason), or out of resources out; ai-fol's search through one adapter (§5) | A proved claim is checked alone and cited by instantiating it under the caller's scope; a machine handles no caller's context. A refutation can be spurious, as SAT does not see the relations between predicates. |
+| 14 | Obligations keep the types their spec gives them, and the proof compiler, untrusted, picks each one's reduction: bit-typed values bit-blasted to SAT, integers and words by theory reasoning (SMT), or a whole design by refinement to a spec over integers; Part B builds the bit route | Abstractions of integers save a lot over every bit, and obligations are compiled from the spec. A reduction is a layer above what is trusted, the checker and the statement compiler's meaning. Bits remain for single-wire combinational logic, single-bit registers and ad hoc structures. |
+| 15 | The spec language is designed before Part B, one language for circuits and decentralized protocols alike: the user writes a spec, and an implementation refines it (§7) | Much is shared: modules, types, properties and proof hints; one language lets claims cross layers, a node's hardware refining its protocol-level spec. |
+| 16 | The language is designed first for how a user reads it, its capabilities and the problem it solves; compiling, proving, machines and interaction come after. It reasons about state machines at the abstract level through refinement chains, spec ⊒ model 1 ⊒ model 2 ⊒ … ⊒ implementation. State machines are its built-in, emphasized construct, but general first-order statements are allowed, so it is complete when needed. Simulatable models, under a well-formedness condition, are kept in mind for later. Its design and decisions are `LANGUAGE.md` | The user's direction (2026-11-23), after the survey of existing languages: learn from them, design from first principles, and solve what they cannot. |
+| 17 | User-written material never adds an axiom. Its names, kinds of simulation, families, helper notions and the definitions a claim uses, are abbreviations the compilers expand before fol-zfc, and the sets it needs come from the class machine's proved existence claims. `@def` axioms stay in the library's reviewed meaning layer | fol-zfc checks of a `@def` only that its predicate is new and that the axiom mentions it, so a user's "definition" could be any axiom, even a contradictory one from which every claim follows. Expanded, a user's kind adds nothing to trust: a proof that checks is enough, whoever wrote it (the user, 2026-11-23: trust comes from the checker). |
+| 18 | The statement compiler and the renderer, which are trusted, are hand-written C++ in this repository, small enough to review, with no parser or IR framework in them; the round-trip test checks them. Frameworks serve only untrusted parts: slang or Yosys for importing RTL, tree-sitter and a language server for editors, solvers as machines. Isabelle/ZF with isa2fol is evaluated as the way to prove library theorems before any is written by hand | The user's choice (2026-11-23), after the frameworks were laid out: a framework in the statement compiler puts its code in what is trusted, since a bug there changes a claim's meaning while every proof still checks; Clang, Swift, Rust and Go hand-write their parsers too. Untrusted output is checked, so any framework is safe there. isa2fol's proofs are checked by fol-zfc, so Isabelle's automation adds no trust; its cost is a bridge from each Isabelle notion to ours. |
+| 19 | The class machine reads a defined predicate through a row, a class proved once, as it reads `zero`, `nsucc` and `snoc`, and unfolds a predicate that has none. The foundation's predicates' rows live in the class machine's package, made by the machine in its build; each library's rows live with that library; a predicate with no row gets one made inside the request, and a row is found by its statement (the user, 2026-11-23, after the machine's output was measured; the class machine's `DESIGN.md`, decisions 3 to 5) | 95% of the machine's lines came from unfolding `tuple` (68%) and `pmem` (27%) at every occurrence; rows cut an estimated 16× of all its lines, and the machine's own run takes seconds where checking its output took 25 minutes. |
+| 20 | Proof compression is a standalone machine, and every proof a machine writes goes through it before `proof_checker`: fol-zfc-comb-lib's `src/machines/compress`, beside the class machine, on the checker's public replay. It drops the steps no kept step reads, reads each held fact from the step that set it, and writes short names and only the parentheses needed. The class machine runs it in process; sysprove's proofs go through `fol_compressed_proof` (the user, 2026-11-24) | A proof's size is what the checker parses and what a customer stores and checks again. One machine serves every writer, rtl2fol's included, where each writer would otherwise write its own pass; inside fol-zfc-comb-lib the class machine reaches it, and the checker's tree stays as it is. It is untrusted: each rewritten block is checked before it is kept. |
 
 ## 10. Open, for the user
 
-- The core constructs, and stuttering, fairness and composition. Fairness may be a property of runs, stated with the
+- The core constructs (`LANGUAGE.md`), fairness and composition. Fairness may be a property of runs, stated with the
   systems layer's notions, rather than a component of a system (the user's view); it must then leave a fair run from
   every reachable state, or a liveness claim holds vacuously, as an unproved wf would make a safety claim hold.
-  Stuttering is a simulation in which an implementation step that is invisible, its input and output meaning nothing
-  happened (a valid bit at 0), may be matched by no spec step; which steps are invisible can be an argument of that
-  notion rather than a component of a system.
 - The systems layer first, or the generic layer first.
 - A counterexample: checked by evaluation, or proved in fol-zfc as the claim's negation.
-- rtl2fol: a front end of sys2fol, or a separate pipeline.
-- The machine interface's exact form, shared with ai-fol and rtl2fol.
 - The arithmetic a spec ranges over: ℤ (in the library), ℚ or ℝ (not yet).
 
 Tools needed: CaDiCaL (LRAT), abc (PDR), cvc5.
