@@ -1,0 +1,8 @@
+load("@fol_zfc//build:fol.bzl", "fol_proof")
+
+fol_proof(
+    name = "smoke",
+    header = "smoke.fol.def",
+    proof = "smoke.fol.proof",
+    deps = ["@fol_zfc//lib:base"],
+)

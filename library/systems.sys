@@ -1,0 +1,19 @@
+-- The systems library, as far as the first claims use it. Its predicates are fol-zfc-comb-lib's math/systems.
+
+extern is_wellformed(State, Input, Output, step, initial) = "Sys.wellformed"
+extern is_reachable(State, step, initial, s) = "Sys.reachable"
+
+structure System(State, Input, Output: type)
+  initial : set of State
+  step    : set of (State, Input, Output, State)
+  where
+    wellformed: is_wellformed(State, Input, Output, step, initial)
+
+alias module = instance of System
+  input for Input,  output for Output,  state for State,  initially for initial,  rules for step
+
+define reachable(m: System) = { s in m.State | is_reachable(m.State, m.step, m.initial, s) }
+
+type bit = 0 ..< 2
+
+extern type nat = "Sys.natural"

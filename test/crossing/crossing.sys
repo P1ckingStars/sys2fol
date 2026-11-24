@@ -1,0 +1,15 @@
+-- Two lights at a crossing, never both green.
+use systems
+
+type Light = red | green
+
+module Crossing
+  input  switch : bit
+  state  ns : Light,  ew : Light
+  initially ns = green and ew = red
+
+  on switch = 1 when ns = green → next ns = red and next ew = green
+  on switch = 1 when ns = red   → next ns = green and next ew = red
+  on switch = 0                 → unchanged
+
+theorem crossing_safe: reachable(Crossing) ⊆ { s in Crossing.State | not (s.ns = green and s.ew = green) }

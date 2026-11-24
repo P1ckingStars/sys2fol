@@ -1,0 +1,2 @@
+# sys2fol builds against fol-zfc-comb-lib's checker and foundation.
+claim Smoke.identity: (forall x. (set(x) -> set(x)))

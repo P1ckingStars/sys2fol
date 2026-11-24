@@ -1,0 +1,14 @@
+module(
+    name = "sys2fol",
+    version = "0.1.0",
+)
+
+bazel_dep(name = "rules_cc", version = "0.2.17")
+bazel_dep(name = "googletest", version = "1.17.0")
+
+# The checker and the NBG library sys2fol's claims are checked over.
+bazel_dep(name = "fol_zfc", version = "0.1.0")
+local_path_override(
+    module_name = "fol_zfc",
+    path = "../fol-zfc-comb-lib",
+)

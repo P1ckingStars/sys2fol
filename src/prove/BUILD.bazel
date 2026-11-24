@@ -1,0 +1,27 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+# The proof compiler: steps for a spec's claims. Untrusted: proof_checker checks all it writes.
+cc_library(
+    name = "prove",
+    srcs = [
+        "facts.cc",
+        "formula.cc",
+        "lemmas.cc",
+        "proof.cc",
+        "system.cc",
+        "tactics.cc",
+    ],
+    hdrs = [
+        "facts.h",
+        "formula.h",
+        "lemmas.h",
+        "proof.h",
+        "system.h",
+        "tactics.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/lang:writer",
+        "@fol_zfc//src/parser",
+    ],
+)

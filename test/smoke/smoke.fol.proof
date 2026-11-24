@@ -1,0 +1,6 @@
+proof Smoke.identity:
+    fix x
+    _h1 = assume set(x)
+    _h2 = implies_intro _h1
+    _h3 = forall_intro _h2
+    qed _h3

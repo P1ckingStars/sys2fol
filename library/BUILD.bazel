@@ -1,0 +1,14 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+exports_files(["systems.sys"])
+
+# The library's definitions, printed as the language resolves them, are its source, token for token.
+cc_test(
+    name = "roundtrip",
+    args = [
+        "--check",
+        "$(rootpath systems.sys)",
+    ],
+    data = ["systems.sys"],
+    deps = ["//src/tools:sysrender_main"],
+)

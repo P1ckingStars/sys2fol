@@ -1,0 +1,23 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+# The renderer: claims read back from fol-zfc, by fol-zfc's own parser.
+cc_library(
+    name = "render",
+    srcs = [
+        "decompile.cc",
+        "fol_read.cc",
+        "fold.cc",
+        "render.cc",
+    ],
+    hdrs = [
+        "decompile.h",
+        "fol_read.h",
+        "fold.h",
+        "render.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/lang:core",
+        "@fol_zfc//src/parser",
+    ],
+)

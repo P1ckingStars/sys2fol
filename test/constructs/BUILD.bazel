@@ -1,0 +1,54 @@
+load("@fol_zfc//build:fol.bzl", "fol_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+genrule(
+    name = "compile",
+    srcs = [
+        "constructs.sys",
+        "//library:systems.sys",
+    ],
+    outs = ["constructs.fol.def"],
+    cmd = "$(location //src/tools:sysc) --prelude $(location //library:systems.sys) $(location constructs.sys) $@",
+    tools = ["//src/tools:sysc"],
+)
+
+fol_library(
+    name = "claims",
+    header = ":constructs.fol.def",
+    deps = [
+        "@fol_zfc//math/systems:basic",
+        "@fol_zfc//math/systems:reach",
+    ],
+)
+
+# The claims read back, for review.
+genrule(
+    name = "read",
+    srcs = [
+        "constructs.sys",
+        ":constructs.fol.def",
+        "//library:systems.sys",
+    ],
+    outs = ["constructs.read.sys"],
+    cmd = "$(location //src/tools:sysrender) --prelude $(location //library:systems.sys) $(location constructs.sys) $(location :constructs.fol.def) $@",
+    tools = ["//src/tools:sysrender"],
+)
+
+# The claims fol-zfc compiled, read back, are the spec, token for token.
+cc_test(
+    name = "roundtrip",
+    args = [
+        "--check",
+        "--prelude",
+        "$(rootpath //library:systems.sys)",
+        "$(rootpath constructs.sys)",
+        "$(rootpath :constructs.fol.def)",
+    ],
+    data = [
+        "constructs.sys",
+        ":claims",
+        ":constructs.fol.def",
+        "//library:systems.sys",
+    ],
+    deps = ["//src/tools:sysrender_main"],
+)

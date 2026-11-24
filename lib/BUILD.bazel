@@ -1,0 +1,6 @@
+# fol-zfc-comb-lib's ZF unit cites its foundation from the main repository.
+alias(
+    name = "base",
+    actual = "@fol_zfc//lib:base",
+    visibility = ["//visibility:public"],
+)

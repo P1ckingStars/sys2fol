@@ -1,0 +1,169 @@
+load("@fol_zfc//build:fol.bzl", "fol_library", "fol_proof")
+load("@fol_zfc//src/machines/class:defs.bzl", "class_claim")
+load("@fol_zfc//src/machines/compress:defs.bzl", "fol_compressed_proof")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//build:prove.bzl", "sys_prove")
+
+genrule(
+    name = "compile",
+    srcs = [
+        "queue.sys",
+        "//library:systems.sys",
+    ],
+    outs = ["queue.fol.def"],
+    cmd = "$(location //src/tools:sysc) --prelude $(location //library:systems.sys) $(location queue.sys) $@",
+    tools = ["//src/tools:sysc"],
+)
+
+fol_library(
+    name = "claims",
+    header = ":queue.fol.def",
+    deps = [
+        "@fol_zfc//math/systems:natural",
+        "@fol_zfc//math/systems:reach",
+    ],
+)
+
+# The claims read back, for review.
+genrule(
+    name = "read",
+    srcs = [
+        "queue.sys",
+        ":queue.fol.def",
+        "//library:systems.sys",
+    ],
+    outs = ["queue.read.sys"],
+    cmd = "$(location //src/tools:sysrender) --prelude $(location //library:systems.sys) $(location queue.sys) $(location :queue.fol.def) $@",
+    tools = ["//src/tools:sysrender"],
+)
+
+# The claims fol-zfc compiled, read back, are the spec, token for token.
+cc_test(
+    name = "roundtrip",
+    args = [
+        "--check",
+        "--prelude",
+        "$(rootpath //library:systems.sys)",
+        "$(rootpath queue.sys)",
+        "$(rootpath :queue.fol.def)",
+    ],
+    data = [
+        "queue.sys",
+        ":claims",
+        ":queue.fol.def",
+        "//library:systems.sys",
+    ],
+    deps = ["//src/tools:sysrender_main"],
+)
+
+SETS = [
+    "queue_within_capacity",
+    "seq.rest",
+    "nat.cases",
+    "BoundedQueue.State",
+    "BoundedQueue.Input",
+    "BoundedQueue.Output",
+    "BoundedQueue.initial",
+    "BoundedQueue.step",
+]
+
+sys_prove(
+    name = "requests",
+    srcs = [
+        "queue.sys",
+        ":queue.fol.def",
+        "//library:systems.sys",
+    ],
+    outs = [s + ".req" for s in SETS],
+    arguments = [
+        "requests",
+        "--prelude",
+        "$(location //library:systems.sys)",
+        "$(location queue.sys)",
+        "$(location :queue.fol.def)",
+    ] + [x for i, s in enumerate(SETS) for x in ["--req", "%s={out%d}" % (s, i)]],
+)
+
+[class_claim(
+    name = s + "_gen",
+    out_def = s + ".fol.def",
+    out_proof = s + ".fol.proof",
+    request = s + ".req",
+    deps = ["@fol_zfc//math/systems:natural"],
+) for s in SETS]
+
+[fol_proof(
+    name = s + "_set",
+    header = s + ".fol.def",
+    proof = s + ".fol.proof",
+    deps = ["@fol_zfc//math/systems:natural"],
+) for s in SETS]
+
+sys_prove(
+    name = "proofs",
+    srcs = [
+        "queue.sys",
+        ":queue.fol.def",
+        "//library:systems.sys",
+    ] + [s + ".fol.def" for s in SETS],
+    outs = [
+        "queue.lemmas.fol.def",
+        "queue.lemmas.fol.proof",
+        "queue.fol.proof",
+    ],
+    arguments = [
+        "prove",
+        "--prelude",
+        "$(location //library:systems.sys)",
+        "$(location queue.sys)",
+        "$(location :queue.fol.def)",
+    ] + [x for s in SETS for x in ["--set", "%s=$(location %s.fol.def)" % (s, s)]] + [
+        "{out0}",
+        "{out1}",
+        "{out2}",
+    ],
+    deps = [
+        "@fol_zfc//math/systems:natural",
+        "@fol_zfc//math/systems:reach",
+    ],
+)
+
+# sysprove's proofs, written smaller by the compression machine before the check.
+fol_compressed_proof(
+    name = "lemmas",
+    header = "queue.lemmas.fol.def",
+    proof = "queue.lemmas.fol.proof",
+    deps = ["@fol_zfc//math/systems:natural", ":seq.rest_set", ":nat.cases_set"],
+)
+
+fol_compressed_proof(
+    name = "proved",
+    header = ":queue.fol.def",
+    proof = "queue.fol.proof",
+    deps = [
+        ":lemmas",
+        "@fol_zfc//math/systems:natural",
+        "@fol_zfc//math/systems:reach",
+    ] + [":" + s + "_set" for s in SETS],
+)
+
+# Every claim of the spec, its lemmas and its sets is on proof_checker's Proved list.
+cc_test(
+    name = "proved_test",
+    args = [
+        "$(rootpath :queue.fol.def)",
+        "$(rootpath :proved)",
+        "$(rootpath :queue.lemmas.fol.def)",
+        "$(rootpath :lemmas)",
+    ] + [x for s in SETS for x in [
+        "$(rootpath :%s.fol.def)" % s,
+        "$(rootpath :%s_set)" % s,
+    ]],
+    data = [
+        ":queue.fol.def",
+        ":queue.lemmas.fol.def",
+        ":lemmas",
+        ":proved",
+    ] + [":%s.fol.def" % s for s in SETS] + [":%s_set" % s for s in SETS],
+    deps = ["//src/tools:proved_main"],
+)

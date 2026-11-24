@@ -1,0 +1,40 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+cc_binary(
+    name = "sysc",
+    srcs = ["sysc.cc"],
+    visibility = ["//visibility:public"],
+    deps = ["//src/lang:writer"],
+)
+
+# sysrender's main, linked into the binary and into each round-trip test.
+cc_library(
+    name = "sysrender_main",
+    srcs = ["sysrender.cc"],
+    visibility = ["//visibility:public"],
+    deps = ["//src/render"],
+    alwayslink = True,
+)
+
+cc_binary(
+    name = "sysrender",
+    visibility = ["//visibility:public"],
+    deps = [":sysrender_main"],
+)
+
+cc_binary(
+    name = "sysprove",
+    srcs = ["sysprove.cc"],
+    visibility = ["//visibility:public"],
+    deps = ["//src/prove"],
+)
+
+# A test's main: every claim of a header is on a fol_proof's Proved list.
+cc_library(
+    name = "proved_main",
+    srcs = ["proved.cc"],
+    visibility = ["//visibility:public"],
+    deps = ["//src/prove"],
+    alwayslink = True,
+)

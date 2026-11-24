@@ -1,0 +1,18 @@
+-- Every construct the statement compiler writes, so the round trip checks each of its translations.
+use systems
+type Mode = idle | busy | done
+module Counter
+  input  go : bit,  stop : bit
+  output out : Mode
+  state  mode : Mode,  flag : bit
+  initially mode = idle and flag = 0
+  on go = 1 when mode = idle or flag = 1 → next mode = busy and out = busy
+  on stop = 1 when mode != idle → next mode = done and next flag = 1 and out = done
+  on any when mode = done → out = idle
+  on any → out = mode
+theorem modes: all s in Counter.State: s.mode = idle or s.mode = busy or s.mode = done
+theorem flags: some s in Counter.State: s.flag = 0 implies s.mode != busy
+theorem starts: Counter.initial ⊆ Counter.State and (some s in Counter.State: s in Counter.initial)
+theorem subsets: some x in set of Counter.State: x = Counter.initial
+theorem counts: all n in 0 ..< 3: n = n
+theorem nested: not (all s in Counter.State: s.flag = 1) implies reachable(Counter) ⊆ Counter.State

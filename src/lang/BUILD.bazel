@@ -1,0 +1,24 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+# The language: parsing, names and aliases.
+cc_library(
+    name = "core",
+    srcs = [
+        "core.cc",
+        "syntax.cc",
+    ],
+    hdrs = [
+        "core.h",
+        "syntax.h",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# The writer: a spec's claims in fol-zfc. The renderer, which checks it, does not link it.
+cc_library(
+    name = "writer",
+    srcs = ["fol.cc"],
+    hdrs = ["fol.h"],
+    visibility = ["//visibility:public"],
+    deps = [":core"],
+)

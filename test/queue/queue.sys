@@ -1,0 +1,11 @@
+use systems
+module BoundedQueue(Job: type, capacity: nat)
+  input  command  : submit(job: Job) | take
+  output response : accepted | rejected | took(job: Job) | empty
+  state  queue    : sequence of Job
+  initially queue = []
+  on submit(job) when length(queue) < capacity → response = accepted and next queue = queue ++ [job]
+  on submit(job) when length(queue) ≥ capacity → response = rejected
+  on take when queue ≠ [] → response = took(first(queue)) and next queue = rest(queue)
+  on take when queue = [] → response = empty
+theorem queue_within_capacity(Job: type, capacity: nat): reachable(BoundedQueue(Job, capacity)) ⊆ { s in BoundedQueue(Job, capacity).State | length(s.queue) ≤ capacity }
