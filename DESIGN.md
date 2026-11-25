@@ -199,8 +199,8 @@ about a system quantifies over the system's sets, each characterized by its memb
 it exists; a step relation is bounded only by its state and input sets, so `Sys.wellformed` owes that every rule stays
 in its types. Its data, as decision 23 keeps them: an enum's cases are the numbers 0, 1, …; a record is a tuple written
 as `Sys.tuple2` and `Sys.tuple4` write theirs, and the empty record is 0; `extern` names a library predicate in the
-library's own text. A claim still restates each number at every mention, where decision 23 constructs it once at the
-claim's top: that is to build.
+library's own text. A claim names each number it uses once, at its top, by successor steps (decision 23); the
+doubling steps decision 23 gives other values are to build.
 
 Step 1's renderer is `sysrender` (`src/render`). It links fol-zfc's parser and not `sysc`'s writer: it reads each claim
 as fol-zfc parses it and inverts the writer's encoding pattern by pattern, refusing any other shape. Instances and
@@ -260,12 +260,11 @@ empty q, which another rule must cover; the proof route takes `length(q) ≠ 0` 
 split on emptiness without one. `rest` is the library's `Sys.tuple_rest`, whose proof takes two sets from the class
 machine, the shifted pairs and the naturals that are 0 or a successor, for the length's predecessor, where append has
 `snoc_EX`. The facts about natural numbers are the library's `natural_facts`, from the translated ZF library through
-`Sys.natural_nat`. The class
-machine takes a parameter only on a membership's right side, `pmem`'s third place being one: elsewhere, as `capacity`
-in `capacity ≤ length(queue)`, the request names a variable with the parameter's members, which the proof returns to
-the parameter by extensionality. Sizes, as checked: 5,105 proof lines (160 KB) for the claims, 1,299 (39 KB) for the
-step typing, and 7,884 (268 KB) from the class machine, 5,618 of them the step relation's set, which `proof_checker` checks
-in 1.9 seconds, nearly all of it loading the libraries. `rest`
+`Sys.natural_nat`. Each
+request names the claim's numbers and parameters themselves, as the class machine reads a set parameter in any place
+(its `DESIGN.md`, decision 10). Sizes, as checked: 4,345 proof lines (100 KB) for the claims, 1,194 (29 KB) for the
+step typing, and 6,939 (183 KB) from the class machine, 4,637 of them the step relation's set, which `proof_checker`
+checks in 1.8 seconds, nearly all of it loading the libraries. `rest`
 and `first` with no value on `[]` is the user's decision (`LANGUAGE.md`, L4 in part).
 
 ## 8. Not now

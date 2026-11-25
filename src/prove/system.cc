@@ -175,51 +175,6 @@ std::optional<AppendP> as_append(const FmP& f) {
     return AppendP{a->args[0], b->args[2], b->args[3]};
 }
 
-// Whether p occurs in f other than as a membership's right side, pmem(u, v, p) being one by pmem_def.
-bool misplaced(const FmP& f, const std::string& p) {
-    if (f->k == Fm::Atom) {
-        for (size_t i = 0; i < f->args.size(); ++i)
-            if (f->args[i] == p && !(f->name == "elem" && i == 1) && !(f->name == "pmem" && i == 2)) return true;
-        return false;
-    }
-    if ((f->k == Fm::Forall || f->k == Fm::Exists) && f->name == p) return false;
-    return (f->a && misplaced(f->a, p)) || (f->b && misplaced(f->b, p));
-}
-
-// (forall z. (elem(z, c) <-> elem(z, p))): c has p's members, so is p.
-FmP same_members(const std::string& c, const std::string& p) {
-    return all("z", iff(atom("elem", {"z", c}), atom("elem", {"z", p})));
-}
-
-// p in a (same_members(c, p) & body) form: its other side, or "".
-std::string members_of(const FmP& f, const std::string& c) {
-    auto z = as_all(f);
-    if (!z || z->body->k != Fm::Iff || !is_atom(z->body->a, "elem", {z->v, c})) return "";
-    const FmP& r = z->body->b;
-    if (r->k != Fm::Atom || r->name != "elem" || r->args.size() != 2 || r->args[0] != z->v) return "";
-    return r->args[1];
-}
-
-// f with each (elem(x, c) | eq(x, c)) written elem(x, s): x <= c is x in s, s the successor of c, by nsucc_def. The class
-// machine takes a parameter only on a membership's right side.
-FmP below_succ(const FmP& f, const std::string& c, const std::string& s) {
-    if (f->k == Fm::Or && f->a->k == Fm::Atom && f->a->name == "elem" && f->b->k == Fm::Atom && f->b->name == "eq" &&
-        f->a->args == f->b->args && f->a->args[1] == c)
-        return atom("elem", {f->a->args[0], s});
-    switch (f->k) {
-        case Fm::Atom:
-        case Fm::False: return f;
-        case Fm::Not: return neg(below_succ(f->a, c, s));
-        case Fm::Forall: return forall(f->name, below_succ(f->a, c, s));
-        case Fm::Exists: return exists(f->name, below_succ(f->a, c, s));
-        case Fm::And: return conj(below_succ(f->a, c, s), below_succ(f->b, c, s));
-        case Fm::Or: return disj(below_succ(f->a, c, s), below_succ(f->b, c, s));
-        case Fm::Imp: return imp(below_succ(f->a, c, s), below_succ(f->b, c, s));
-        case Fm::Iff: return iff(below_succ(f->a, c, s), below_succ(f->b, c, s));
-    }
-    return f;
-}
-
 // ---- Values: what each variable's entries and numerals are, and the steps that say so ----
 
 struct Entries {
@@ -2115,58 +2070,19 @@ private:
             auto qb = as_all(subst(cb->body, {{cb->v, Cs}}));
             H all_q = t.all("q", [&](const std::string& q) {
                 H iffw = t.inst(all_w, {q});
-                FmP mq = t.p.fm(iffw)->b->b;
                 FmP Mq = subst(qb->body, {{qb->v, q}})->b;
-                H l = t.assume(atom("elem", {q, Cs}), [&](H h) { return from_request(t, t.p.and_r(t.p.iff_l(iffw, h))); });
-                H r = t.assume(Mq, [&](H h) { return t.p.iff_r(iffw, t.p.and_intro(bound(q, h), to_request(t, h, mq))); });
+                H l = t.assume(atom("elem", {q, Cs}), [&](H h) { return t.p.and_r(t.p.iff_l(iffw, h)); });
+                H r = t.assume(Mq, [&](H h) { return t.p.iff_r(iffw, t.p.and_intro(bound(q, h), h)); });
                 return t.p.iff_intro(l, r);
             });
             return t.witness(body, Cs, all_q);
         });
     }
 
-    // A condition's set from the SET claim at its bound: the claim's own when the request wrote its formula as the claim
-    // does, else each member's condition carried to and from the request's form of it.
+    // A condition's set: the SET claim at its bound, whose formula is the condition's own.
     H condition_set(Tac& t, const FmP& body, H set_at_b) {
-        if (alpha_eq(t.p.fm(set_at_b), body)) return set_at_b;
-        auto cb = as_some(body);
-        return t.obtain(set_at_b, "C", [&](const std::string& Cs, H all_w) {
-            auto qb = as_all(subst(cb->body, {{cb->v, Cs}}));
-            H all_q = t.all("q", [&](const std::string& q) {
-                H iffw = t.inst(all_w, {q});
-                FmP Mq = subst(qb->body, {{qb->v, q}})->b;
-                H l = t.assume(atom("elem", {q, Cs}), [&](H h) {
-                    H in = t.p.iff_l(iffw, h);
-                    return t.p.and_intro(t.p.and_l(in), from_request(t, t.p.and_r(in)));
-                });
-                H r = t.assume(Mq, [&](H h) {
-                    return t.p.iff_r(iffw, t.p.and_intro(t.p.and_l(h), to_request(t, t.p.and_r(h), t.p.fm(iffw)->b->b)));
-                });
-                return t.p.iff_intro(l, r);
-            });
-            return t.witness(body, Cs, all_q);
-        });
-    }
-
-    // M from the request's form of it, (exists c. (same_members(c, p) & M[c/p])): each c is its p, by extensionality.
-    H from_request(Tac& t, H h) {
-        auto s = as_some(t.p.fm(h));
-        if (!s || s->body->k != Fm::And || members_of(s->body->a, s->v).empty()) return h;
-        return t.obtain(h, s->v, [&](const std::string& c, H b) {
-            std::vector<H> parts = t.split(b, 2);
-            std::string p = members_of(t.p.fm(parts[0]), c);
-            H e = t.p.iff_r(t.inst(t.p.use("extensionality"), {c, p}), parts[0]);
-            return transport(t, lm_, c, p, e, from_request(t, parts[1]));
-        });
-    }
-
-    H to_request(Tac& t, H h, const FmP& target) {
-        auto s = as_some(target);
-        std::string p = s && s->body->k == Fm::And ? members_of(s->body->a, s->v) : "";
-        if (p.empty()) return h;
-        FmP body = subst(s->body, {{s->v, p}});
-        H same = t.p.iff_l(t.inst(t.p.use("extensionality"), {p, p}), refl(t, p));
-        return t.witness(target, p, t.p.and_intro(same, to_request(t, h, body->b)));
+        if (!alpha_eq(t.p.fm(set_at_b), body)) throw std::runtime_error("a condition's set is not of its formula");
+        return set_at_b;
     }
 
     // The SET claim for purpose at its parameters and at B. Its request named each free variable of the claim's formula M
@@ -2416,29 +2332,11 @@ private:
             }
         if (!found) throw std::runtime_error("the bound " + c + " is not a natural-number parameter");
         auto le = [&](const std::string& n) { return disj(atom("elem", {n, c}), atom("eq", {n, c})); };
-        // The invariant is cut by the successor sc of c: n <= c is n in sc.
-        return t.obtain(t.inst(t.p.use("nsucc_EX"), {c}), "S", [&](const std::string& sc, H nsc) {
-        H below = succ_unfold(t, c, sc, nsc);
-        // φ(u) and φ'(u), its form with n in sc, each from the other.
-        auto conv = [&](const std::string& u, H from, bool to_succ) {
-            FmP target = to_succ ? below_succ(phi(u), c, sc) : phi(u);
-            return t.obtain(from, "v", [&](const std::string& v, H bv) {
-                std::vector<H> av = t.split(bv, 2);
-                return t.obtain(av[1], "n", [&](const std::string& n, H bn) {
-                    std::vector<H> tn = t.split(bn, 2);
-                    H iffn = t.inst(below, {n});
-                    H len = to_succ ? t.p.iff_r(iffn, tn[1]) : t.p.iff_l(iffn, tn[1]);
-                    auto s1 = as_some(target);
-                    FmP inner = subst(s1->body, {{s1->v, v}})->b;
-                    return t.witness(target, v, t.p.and_intro(av[0], t.witness(inner, n, t.p.and_intro(tn[0], len))));
-                });
-            });
-        };
         std::string hint;
         for (VarId v : th.params)
             if (p_.vars[v.v].bound) hint = p_.vars[v.v].hint;
         std::string q0 = fresh("_q");
-        H setb = set_at(t, th.name, {{"par_succ_" + hint, sc}}, below_succ(phi(q0), c, sc), q0, C[S]);
+        H setb = set_at(t, th.name, {{"par_" + hint, c}}, phi(q0), q0, C[S]);
         return t.obtain(setb, "P", [&](const std::string& Pset, H pc) {
             H wf = t.mp(t.inst(cite(t, ns_ + "." + p_.name(inst).text + "_wellformed"), P), hyps);
             wf = t.mp(t.inst(wf, C), ch);
@@ -2451,7 +2349,7 @@ private:
             };
             auto in_p = [&](const std::string& u, H uS, H pu) {
                 H iffu = t.inst(pc, {u});
-                return t.p.iff_r(iffu, t.p.and_intro(uS, to_request(t, conv(u, pu, true), t.p.fm(iffu)->b->b)));
+                return t.p.iff_r(iffu, t.p.and_intro(uS, pu));
             };
             H i1 = t.all("u", [&](const std::string& u) {
                 return t.assume(atom("elem", {u, Pset}), [&](H h) { return t.p.and_l(t.p.iff_l(t.inst(pc, {u}), h)); });
@@ -2473,7 +2371,6 @@ private:
             H i3 = t.all("x", [&](const std::string& x) {
                 return t.assume(atom("elem", {x, Pset}), [&](H xP) {
                     std::vector<H> xs = t.split(t.p.iff_l(t.inst(pc, {x}), xP), 2);
-                    xs[1] = conv(x, from_request(t, xs[1]), false);
                     return t.all("a", [&](const std::string& a) {
                         return t.all("b", [&](const std::string& b) {
                             return t.all("u", [&](const std::string& u) {
@@ -2494,10 +2391,9 @@ private:
             return t.all("x", [&](const std::string& x) {
                 return t.assume(subst(bx->body->a, {{bx->v, x}}), [&](H h) {
                     std::vector<H> xs = t.split(t.p.iff_l(t.inst(pc, {x}), t.mp(t.inst(inv, {x}), {t.p.and_r(h)})), 2);
-                    return t.p.and_intro(xs[0], conv(x, from_request(t, xs[1]), false));
+                    return t.p.and_intro(xs[0], xs[1]);
                 });
             });
-        });
         });
     }
 
@@ -2666,7 +2562,7 @@ private:
                     auto in_p = [&](const std::string& u, H uS) {
                         H pu = ev.prove(phi(u));
                         H iffu = t.inst(pc, {u});
-                        return t.p.iff_r(iffu, t.p.and_intro(uS, to_request(t, pu, t.p.fm(iffu)->b->b)));
+                        return t.p.iff_r(iffu, t.p.and_intro(uS, pu));
                     };
                     H i1 = t.all("u", [&](const std::string& u) {
                         return t.assume(atom("elem", {u, P}), [&](H h) { return t.p.and_l(t.p.iff_l(t.inst(pc, {u}), h)); });
@@ -2686,7 +2582,6 @@ private:
                     H i3 = t.all("x", [&](const std::string& x) {
                         return t.assume(atom("elem", {x, P}), [&](H xP) {
                             std::vector<H> xs = t.split(t.p.iff_l(t.inst(pc, {x}), xP), 2);
-                            xs[1] = from_request(t, xs[1]);
                             return t.all("a", [&](const std::string& a) {
                                 return t.all("b", [&](const std::string& b) {
                                     return t.all("u", [&](const std::string& u) {
@@ -2705,7 +2600,7 @@ private:
                         return t.assume(subst(bx->body->a, {{bx->v, x}}), [&](H h) {
                             H xp = t.mp(t.inst(inv, {x}), {t.p.and_r(h)});
                             H in = t.p.iff_l(t.inst(pc, {x}), xp);
-                            return t.p.and_intro(t.p.and_l(in), from_request(t, t.p.and_r(in)));
+                            return in;
                         });
                     });
                 });
@@ -2758,7 +2653,7 @@ private:
                                                         throw std::runtime_error("a step leaves the property: it is no invariant");
                                                     H pu = ev.prove(phi(u));
                                                     H iffu = t.inst(pc, {u});
-                                                    return t.p.iff_r(iffu, t.p.and_intro(uS, to_request(t, pu, t.p.fm(iffu)->b->b)));
+                                                    return t.p.iff_r(iffu, t.p.and_intro(uS, pu));
                                                 });
                                             });
                                         });
@@ -2806,12 +2701,6 @@ std::map<std::string, std::string> requests(const Program& p, const Claims& clai
         return f;
     };
     auto request = [&](FmP phi, const std::string& var, const std::vector<std::string>& params) {
-        // The class machine takes a parameter only on a membership's right side: elsewhere it is a variable c with its members.
-        for (const std::string& v : params)
-            if (misplaced(phi, v)) {
-                std::string c = "c_" + v;
-                phi = some(c, conj(same_members(c, v), subst(phi, {{v, c}})));
-            }
         std::string s = "shape: SET\nvar: " + var + "\nparams: ";
         for (size_t i = 0; i < params.size(); ++i) s += (i ? ", " : "") + params[i] + " set";
         return s + "\nformula: " + print(phi) + "\n";
@@ -2847,8 +2736,6 @@ std::map<std::string, std::string> requests(const Program& p, const Claims& clai
         auto x = as_all(f);
         if (!x || x->body->k != Fm::Imp || x->body->b->k != Fm::And) continue;
         FmP phi = subst(x->body->b->b, {{x->v, "u"}});
-        for (VarId v : th.params)
-            if (p.vars[v.v].bound) phi = below_succ(phi, "par_" + p.vars[v.v].hint, "par_succ_" + p.vars[v.v].hint);
         std::vector<std::string> params;
         for (const std::string& v : free_vars(phi))
             if (v != "u") params.push_back(v);
