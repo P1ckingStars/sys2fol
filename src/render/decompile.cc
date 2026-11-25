@@ -72,71 +72,52 @@ std::vector<FP> disj(const FP& f) {
     return out;
 }
 
-// Numerals z0, ..., zn, z0 being 0 and each the successor of the one before, around `inner`.
-struct Chain {
-    std::vector<int> zs;
-    FP inner;
-};
-
-Chain chain(const FP& f) {
-    Chain c{{}, f};
-    while (auto b = all_set(c.inner)) {
-        if (b->body->kind != F::Implies) break;
-        const FP& guard = b->body->kids[0];
-        if (!(c.zs.empty() ? atom(guard, "zero", {b->v}) : atom(guard, "nsucc", {c.zs.back(), b->v}))) break;
-        c.zs.push_back(b->v);
-        c.inner = b->body->kids[1];
-    }
-    return c;
-}
-
 bool among(int v, const std::vector<int>& vs) {
     for (int x : vs)
         if (x == v) return true;
     return false;
 }
 
-// f says x is the numeral n.
-std::optional<uint64_t> numeral_of(const FP& f, int x) {
-    if (atom(f, "zero", {x})) return 0;
-    Chain c = chain(f);
-    if (c.zs.empty() || !atom(c.inner, "nsucc", {c.zs.back(), x})) return {};
-    return c.zs.size();
+// The numbers a claim names at its top, by variable (decision 23).
+using Nums = std::map<int, uint64_t>;
+
+std::optional<uint64_t> number(const Nums& nums, int v) {
+    auto it = nums.find(v);
+    if (it == nums.end()) return {};
+    return it->second;
 }
 
-std::optional<std::pair<int, uint64_t>> numeral(const FP& f) {
-    if (is_atom(f, "zero", 1)) return {{f->args[0], 0}};
-    Chain c = chain(f);
-    if (c.zs.empty() || !is_atom(c.inner, "nsucc", 2) || c.inner->args[0] != c.zs.back() || among(c.inner->args[1], c.zs))
-        return {};
-    return {{c.inner->args[1], c.zs.size()}};
+// f says x is the number n: eq(x, z_n).
+std::optional<uint64_t> numeral_of(const Nums& nums, const FP& f, int x) {
+    if (!is_atom(f, "eq", 2) || f->args[0] != x) return {};
+    return number(nums, f->args[1]);
 }
 
-// f says v is the part of r at index i.
+// f says v is the part of r at index i: pmem(z_i, v, r).
 struct At {
     int v, r;
     uint32_t i;
 };
 
-std::optional<At> at(const FP& f) {
-    Chain c = chain(f);
-    if (c.zs.empty() || !is_atom(c.inner, "pmem", 3) || c.inner->args[0] != c.zs.back()) return {};
-    if (among(c.inner->args[1], c.zs) || among(c.inner->args[2], c.zs)) return {};
-    return At{c.inner->args[1], c.inner->args[2], static_cast<uint32_t>(c.zs.size() - 1)};
+std::optional<At> at(const Nums& nums, const FP& f) {
+    if (!is_atom(f, "pmem", 3) || number(nums, f->args[1]) || number(nums, f->args[2])) return {};
+    auto i = number(nums, f->args[0]);
+    if (!i) return {};
+    return At{f->args[1], f->args[2], static_cast<uint32_t>(*i)};
 }
 
-// f says r is the tuple of the returned variables.
-std::optional<std::vector<int>> record(const FP& f, int r) {
+// f says r is the tuple of the returned variables: tuple(r, z_k) and pmem(z_i, x_i, r) for each i below k.
+std::optional<std::vector<int>> record(const Nums& nums, const FP& f, int r) {
     if (atom(f, "zero", {r})) return std::vector<int>{};
-    Chain c = chain(f);
-    if (c.zs.size() < 2) return {};
-    size_t k = c.zs.size() - 1;
-    auto cs = conj(c.inner, k + 1);
-    if (!cs || !atom((*cs)[0], "tuple", {r, c.zs[k]})) return {};
+    if (f->kind != F::And || !is_atom(f->kids[0], "tuple", 2) || f->kids[0]->args[0] != r) return {};
+    auto k = number(nums, f->kids[0]->args[1]);
+    if (!k || *k == 0) return {};
+    auto cs = conj(f, *k + 1);
+    if (!cs) return {};
     std::vector<int> xs;
-    for (size_t i = 0; i < k; ++i) {
+    for (size_t i = 0; i < *k; ++i) {
         const FP& m = (*cs)[i + 1];
-        if (!is_atom(m, "pmem", 3) || m->args[0] != c.zs[i] || m->args[2] != r || among(m->args[1], c.zs)) return {};
+        if (!is_atom(m, "pmem", 3) || number(nums, m->args[0]) != i || m->args[2] != r) return {};
         xs.push_back(m->args[1]);
     }
     return xs;
@@ -232,6 +213,21 @@ bool Decompiler::sequence(const NodeP& t) const {
     return ty && ty->k == K::SeqType;
 }
 
+FP Decompiler::numbers(const FP& f) {
+    FP g = f;
+    std::vector<int> zs;
+    while (auto b = all_set(g)) {
+        if (b->body->kind != F::Implies) break;
+        const FP& guard = b->body->kids[0];
+        if (!(zs.empty() ? atom(guard, "zero", {b->v}) : atom(guard, "nsucc", {zs.back(), b->v}))) break;
+        nums_[b->v] = zs.size();
+        env[b->v] = num(zs.size());
+        zs.push_back(b->v);
+        g = b->body->kids[1];
+    }
+    return g;
+}
+
 FP Decompiler::params(const FP& f, const std::vector<VarId>& hints, std::vector<VarId>& out,
                        const std::vector<VarId>* reuse) {
     if (reuse && !reuse->empty() && reuse->size() != hints.size())
@@ -296,7 +292,6 @@ NodeP Decompiler::bind(K k, int x, const NodeP& bound, const FP& body) {
 NodeP Decompiler::predicate(const FP& f) {
     std::vector<NodeP> args;
     for (int a : f->args) args.push_back(term(a, f));
-    if (f->pred == "zero" && args.size() == 1) return mk(K::Eq, {args[0], num(0)});
     if (f->pred == "eq" && args.size() == 2) return mk(K::Eq, args);
     if (f->pred == "elem" && args.size() == 2) return mk(K::In, args);
     auto it = externs_.find(f->pred);
@@ -317,7 +312,6 @@ NodeP Decompiler::formula(const FP& f) {
             return mk(K::Implies, {formula(f->kids[0]), formula(f->kids[1])});
         case F::Atom: return predicate(f);
         case F::All: {
-            if (auto n = numeral(f)) return mk(K::Eq, {term(n->first, f), num(n->second)});
             auto b = all_set(f);
             if (!b || b->body->kind != F::Implies) break;
             NodeP a = member(b->body->kids[0], b->v, false);
@@ -337,17 +331,16 @@ NodeP Decompiler::formula(const FP& f) {
                     env.erase(b->v);
                     return out;
                 };
-                if (auto n = numeral_of(l, b->v)) return value(num(*n));
                 if (is_atom(l, "tuple", 2) && l->args[1] == b->v && l->args[0] != b->v)
                     return value(mk(K::Length, {term(l->args[0], l)}));
                 if (auto q = rest_of(l, b->v)) return value(mk(K::Rest, {term(*q, l)}));
                 if (auto ap = append_of(l, b->v)) return value(mk(K::Append, {term(ap->first, l), term(ap->second, l)}));
-                if (auto xs = record(l, b->v); xs && !xs->empty()) {
+                if (auto xs = record(nums_, l, b->v); xs && !xs->empty()) {
                     std::vector<NodeP> items;
                     for (int x : *xs) items.push_back(term(x, l));
                     return value(mk(K::SeqLit, std::move(items)));
                 }
-                if (auto a = at(l); a && a->v == b->v) {
+                if (auto a = at(nums_, l); a && a->v == b->v) {
                     NodeP r = term(a->r, l);
                     if (a->i == 0 && sequence(r)) return value(mk(K::First, {r}));
                     auto fld = mk(K::Field, {r});
@@ -378,7 +371,7 @@ NodeP Decompiler::member(const FP& f, int x, bool record) {
     {
         std::vector<FP> ds = disj(f);
         bool ok = true;
-        for (size_t i = 0; ok && i < ds.size(); ++i) ok = numeral_of(ds[i], x) == i;
+        for (size_t i = 0; ok && i < ds.size(); ++i) ok = numeral_of(nums_, ds[i], x) == i;
         if (ok) return range(ds.size());
     }
     if (f->kind == F::Ex) {
@@ -413,13 +406,13 @@ NodeP Decompiler::enum_type(const FP& f, int x) {
     auto c = ex_set(f);
     auto q = c ? ex_set(c->body) : std::nullopt;
     if (!q || q->body->kind != F::And) return nullptr;
-    auto tup = record(q->body->kids[0], x);
+    auto tup = record(nums_, q->body->kids[0], x);
     if (!tup || *tup != std::vector<int>{c->v, q->v}) return nullptr;
     std::vector<FP> cases = disj(q->body->kids[1]);
     if (cases.size() < 2) return nullptr;
     auto n = mk(K::EnumType);
     for (size_t k = 0; k < cases.size(); ++k) {
-        if (cases[k]->kind != F::And || numeral_of(cases[k]->kids[0], c->v) != k) return nullptr;
+        if (cases[k]->kind != F::And || numeral_of(nums_, cases[k]->kids[0], c->v) != k) return nullptr;
         NodeP rec = member(cases[k]->kids[1], q->v, true);
         if (!rec || rec->k != K::RecordType) return nullptr;
         n->kids.push_back(rec);
@@ -433,7 +426,7 @@ NodeP Decompiler::record_type(const FP& f, int x) {
     std::vector<int> xs = exists_prefix(g, SIZE_MAX);
     auto cs = conj(g, xs.size() + 1);
     if (xs.empty() || !cs) return nullptr;
-    auto rec = record((*cs)[0], x);
+    auto rec = record(nums_, (*cs)[0], x);
     if (!rec || *rec != xs) return nullptr;
     auto n = mk(K::RecordType);
     for (size_t i = 0; i < xs.size(); ++i) {
@@ -450,12 +443,10 @@ NodeP Decompiler::record_membership(const FP& f) {
     std::vector<int> xs = exists_prefix(g, SIZE_MAX);
     auto cs = conj(g, xs.size() + 1);
     if (xs.empty() || !cs) return nullptr;
-    Chain c = chain((*cs)[0]);
-    if (c.zs.size() < 2) return nullptr;
-    const FP& first = c.inner->kind == F::And ? c.inner->kids[0] : c.inner;
-    if (!is_atom(first, "tuple", 2)) return nullptr;
-    int t = first->args[0];
-    if (among(t, xs) || among(t, c.zs)) return nullptr;
+    const FP& rec = (*cs)[0];
+    if (rec->kind != F::And || !is_atom(rec->kids[0], "tuple", 2)) return nullptr;
+    int t = rec->kids[0]->args[0];
+    if (among(t, xs) || number(nums_, t)) return nullptr;
     NodeP set = record_type(f, t);
     return set ? mk(K::In, {term(t, f), set}) : nullptr;
 }
@@ -484,7 +475,7 @@ std::vector<NodeP> Decompiler::values(const FP& f, int r, size_t n) {
     std::vector<int> xs = exists_prefix(g, n);
     auto cs = conj(g, n + 1);
     if (xs.size() != n || !cs) throw unreadable(f, "a record of " + std::to_string(n) + " values");
-    auto rec = record((*cs)[0], r);
+    auto rec = record(nums_, (*cs)[0], r);
     if (!rec || *rec != xs) throw unreadable((*cs)[0], "a record of " + std::to_string(n) + " values");
     std::vector<NodeP> out;
     for (size_t i = 0; i < n; ++i) {
@@ -523,7 +514,7 @@ ComponentDef Decompiler::rules(const FP& m, int q, NameId inst, FieldId f) {
     if (bt.size() != 2 || !step) throw unreadable(g, "a step and its rules");
     b = bt[0];
     t = bt[1];
-    auto tuple = record((*step)[0], q);
+    auto tuple = record(nums_, (*step)[0], q);
     if (!tuple || *tuple != std::vector<int>{s, a, b, t}) throw unreadable((*step)[0], "a step (s, a, b, t)");
     def.s = p_.new_var("s", comp_node(inst, def.state));
     def.a = p_.new_var("a", comp_node(inst, def.input));

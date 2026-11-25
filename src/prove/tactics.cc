@@ -17,28 +17,11 @@ FmP chain(size_t k, const std::function<FmP(const std::vector<std::string>&)>& i
     return body;
 }
 
-FmP num(uint64_t c, const std::string& x) {
-    if (c == 0) return atom("zero", {x});
-    return chain(c - 1, [&](const std::vector<std::string>& z) { return atom("nsucc", {z[c - 1], x}); });
-}
-
-FmP at(uint32_t i, const std::string& v, const std::string& r) {
-    return chain(i, [&](const std::vector<std::string>& z) { return atom("pmem", {z[i], v, r}); });
-}
-
-FmP rec(const std::string& r, const std::vector<std::string>& xs) {
+FmP rec(const std::string& r, const std::vector<std::string>& xs, const std::vector<std::string>& z) {
     if (xs.empty()) return atom("zero", {r});
-    return chain(xs.size(), [&](const std::vector<std::string>& z) {
-        std::vector<FmP> parts{atom("tuple", {r, z[xs.size()]})};
-        for (size_t i = 0; i < xs.size(); ++i) parts.push_back(atom("pmem", {z[i], xs[i], r}));
-        return conj(parts);
-    });
-}
-
-FmP range(uint64_t n, const std::string& x) {
-    std::vector<FmP> cases;
-    for (uint64_t i = 0; i < n; ++i) cases.push_back(num(i, x));
-    return disj(cases);
+    std::vector<FmP> parts{atom("tuple", {r, z.at(xs.size())})};
+    for (size_t i = 0; i < xs.size(); ++i) parts.push_back(atom("pmem", {z[i], xs[i], r}));
+    return conj(parts);
 }
 
 }  // namespace enc

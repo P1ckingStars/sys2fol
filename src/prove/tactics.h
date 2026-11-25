@@ -10,14 +10,12 @@
 
 namespace sys2fol::prove {
 
-// The writer's encodings, as formulas: what a claim says of numbers, fields and records.
+// The writer's encodings, as formulas: numbers named at a statement's top, and records over them.
 namespace enc {
 // Numerals z0, ..., zk, z0 being 0 and each the successor of the one before, around `inner`.
 FmP chain(size_t k, const std::function<FmP(const std::vector<std::string>&)>& inner);
-FmP num(uint64_t c, const std::string& x);
-FmP at(uint32_t i, const std::string& v, const std::string& r);
-FmP rec(const std::string& r, const std::vector<std::string>& xs);
-FmP range(uint64_t n, const std::string& x);
+// r is the tuple of xs: tuple(r, z_k) and pmem(z_i, x_i, r), at the numbers z.
+FmP rec(const std::string& r, const std::vector<std::string>& xs, const std::vector<std::string>& z);
 }  // namespace enc
 
 // Common shapes of steps over a Proof. Every variable a tactic introduces is a set, and its set(x) step is kept.

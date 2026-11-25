@@ -12,7 +12,7 @@
 
 namespace sys2fol::prove {
 
-enum class Family { canon, is_canon, below, distinct, num_cong, at, at_fun, at_cong, rec_ex, index_cases };
+enum class Family { below, distinct, rec_ex, index_cases };
 
 // A family of facts indexed by sizes, at its sizes: "at 4 3" in a project's lists (DESIGN.md §4).
 struct Instance {
@@ -32,17 +32,14 @@ public:
     Lemmas(std::string ns, std::map<std::string, FmP>& known, std::string project = "", bool prove_instances = false)
         : ns_(std::move(ns)), known_(known), project_(std::move(project)), prove_instances_(prove_instances) {}
 
-    std::string canon(uint64_t c);               // chain(c, z => z_c is the numeral c)
-    std::string is_canon(uint64_t c);            // a numeral c is z_c of every chain
+    // Each stated over numbers z_0, ..., z_k named at its top, cited at the proof's own.
     std::string below(uint64_t c, uint64_t d);   // c < d: z_c in z_d
     std::string distinct(uint64_t c, uint64_t d);  // c < d: not z_c = z_d
-    std::string num_cong(uint64_t c);            // x = y and x the numeral c: y the numeral c
-    std::string at(size_t k, size_t i);          // a record's part i is its entry i
-    std::string at_fun(size_t k, size_t i);      // ... and no other
-    std::string at_cong(size_t i);               // equal records have equal parts
     std::string rec_ex(size_t k);                // every k values make a record
     std::string index_cases(size_t k);           // an index below z_k is one of z_0, ..., z_(k-1)
 
+    std::string zero_cong() const { return "Sys.zero_cong"; }
+    std::string tuple4_at() const { return "Sys.tuple4_at"; }  // Sys.tuple4 at numbers named once
     std::string pmem_cong1() const { return "g3_pmem_cong1"; }  // the foundation's
     std::string pmem_cong2() const { return "Sys.pmem_cong2"; }
     std::string pmem_cong3() const { return "Sys.pmem_cong3"; }

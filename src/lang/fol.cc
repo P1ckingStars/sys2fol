@@ -33,14 +33,10 @@ public:
             case K::And: return bin(formula(n->kids[0]), "&", formula(n->kids[1]));
             case K::Or: return bin(formula(n->kids[0]), "|", formula(n->kids[1]));
             case K::Implies: return bin(formula(n->kids[0]), "->", formula(n->kids[1]));
-            case K::Eq: {
-                const NodeP &l = n->kids[0], &r = n->kids[1];
-                if (r->k == K::Num) return term(l, [&](const std::string& x) { return numeral(r->num, x); });
-                if (l->k == K::Num) return term(r, [&](const std::string& x) { return numeral(l->num, x); });
-                return term(l, [&](const std::string& x) {
-                    return term(r, [&](const std::string& y) { return "eq(" + x + ", " + y + ")"; });
+            case K::Eq:
+                return term(n->kids[0], [&](const std::string& x) {
+                    return term(n->kids[1], [&](const std::string& y) { return "eq(" + x + ", " + y + ")"; });
                 });
-            }
             case K::In: return term(n->kids[0], [&](const std::string& x) { return member(n->kids[1], x); });
             case K::Subset: {
                 std::string x = fresh("x");
@@ -118,10 +114,7 @@ public:
         switch (t->k) {
             case K::Var: return k(var(t->var));
             case K::Comp: return k(comp(t->name, t->field));
-            case K::Num: {
-                std::string x = fresh("v");
-                return ex(x, bin(numeral(t->num, x), "&", k(x)));
-            }
+            case K::Num: return k(num(t->num));
             case K::Field:
                 return term(t->kids[0], [&](const std::string& r) {
                     std::string x = fresh("v");
@@ -151,15 +144,18 @@ public:
                     });
                 });
             case K::SeqLit:
+                if (t->kids.empty()) return k(num(0));
                 return terms(t->kids, 0, {}, [&](const std::vector<std::string>& ys) {
                     std::string v = fresh("v");
                     return ex(v, bin(record(v, ys), "&", k(v)));
                 });
             case K::Case:
                 return terms(t->kids, 0, {}, [&](const std::vector<std::string>& ys) {
-                    std::string c = fresh("c"), q = fresh("p"), v = fresh("v");
-                    std::string tagged = ex(v, bin(record(v, {c, q}), "&", k(v)));
-                    return ex(c, bin(numeral(p_.name(t->name).index, c), "&", ex(q, bin(record(q, ys), "&", tagged))));
+                    std::string v = fresh("v");
+                    auto tagged = [&](const std::string& q) { return ex(v, bin(record(v, {num(p_.name(t->name).index), q}), "&", k(v))); };
+                    if (ys.empty()) return tagged(num(0));
+                    std::string q = fresh("p");
+                    return ex(q, bin(record(q, ys), "&", tagged(q)));
                 });
             default: throw Error(t->pos, "'" + p_.show(t) + "' cannot be a value yet");
         }
@@ -218,10 +214,26 @@ public:
 
     std::string fresh(const std::string& hint) { return hint + std::to_string(++counter_); }
 
+    // The claim with the numbers it uses named once at its top, 0 and each the successor of the one before (decision 23).
+    std::string numbers(std::string f) {
+        for (size_t i = nums_.size(); i-- > 0;) {
+            std::string guard = i == 0 ? "zero(" + nums_[0] + ")" : "nsucc(" + nums_[i - 1] + ", " + nums_[i] + ")";
+            f = all(nums_[i], bin(guard, "->", f));
+        }
+        return f;
+    }
+
 private:
     const Program& p_;
     std::map<VarId, std::string> bound_;
+    std::vector<std::string> nums_;
     int counter_ = 0;
+
+    // The name of the number n, every number up to it named.
+    const std::string& num(uint64_t n) {
+        while (nums_.size() <= n) nums_.push_back(fresh("z"));
+        return nums_[n];
+    }
 
     std::string bind(VarId v) { return bound_[v] = fresh(p_.vars[v.v].hint); }
     std::string var(VarId v) {
@@ -263,35 +275,18 @@ private:
         });
     }
 
-    // Numerals z0, …, zn, z0 being 0 and each the successor of the one before, around `inner`.
-    std::string chain(size_t n, const std::function<std::string(const std::vector<std::string>&)>& inner) {
-        std::vector<std::string> zs;
-        for (size_t i = 0; i <= n; ++i) zs.push_back(fresh("n"));
-        std::string body = inner(zs);
-        for (size_t i = n + 1; i-- > 0;) {
-            std::string guard = i == 0 ? "zero(" + zs[0] + ")" : "nsucc(" + zs[i - 1] + ", " + zs[i] + ")";
-            body = all(zs[i], bin(guard, "->", body));
-        }
-        return body;
-    }
-
-    std::string numeral(uint64_t n, const std::string& x) {
-        if (n == 0) return "zero(" + x + ")";
-        return chain(n - 1, [&](const std::vector<std::string>& z) { return "nsucc(" + z[n - 1] + ", " + x + ")"; });
-    }
+    std::string numeral(uint64_t n, const std::string& x) { return "eq(" + x + ", " + num(n) + ")"; }
 
     std::string at(uint32_t i, const std::string& x, const std::string& r) {
-        return chain(i, [&](const std::vector<std::string>& z) { return "pmem(" + z[i] + ", " + x + ", " + r + ")"; });
+        return "pmem(" + num(i) + ", " + x + ", " + r + ")";
     }
 
-    // r is the tuple ⟨xs⟩, written as the library writes Sys.tuple2 and Sys.tuple4.
+    // r is the tuple ⟨xs⟩: its length and an entry at each index.
     std::string record(const std::string& r, const std::vector<std::string>& xs) {
         if (xs.empty()) return "zero(" + r + ")";
-        return chain(xs.size(), [&](const std::vector<std::string>& z) {
-            std::vector<std::string> parts{"tuple(" + r + ", " + z[xs.size()] + ")"};
-            for (size_t i = 0; i < xs.size(); ++i) parts.push_back("pmem(" + z[i] + ", " + xs[i] + ", " + r + ")");
-            return fold(parts, "&", "");
-        });
+        std::vector<std::string> parts{"tuple(" + r + ", " + num(xs.size()) + ")"};
+        for (size_t i = 0; i < xs.size(); ++i) parts.push_back("pmem(" + num(i) + ", " + xs[i] + ", " + r + ")");
+        return fold(parts, "&", "");
     }
 
     // r is the record of `values`.
@@ -300,10 +295,8 @@ private:
         for (size_t i = 0; i < values.size(); ++i) xs.push_back(fresh("x"));
         std::vector<std::string> body{record(r, xs)};
         for (size_t i = 0; i < values.size(); ++i) {
-            const NodeP& v = values[i];
             const std::string& x = xs[i];
-            if (v->k == K::Num) body.push_back(numeral(v->num, x));
-            else body.push_back(term(v, [&](const std::string& y) { return "eq(" + x + ", " + y + ")"; }));
+            body.push_back(term(values[i], [&](const std::string& y) { return "eq(" + x + ", " + y + ")"; }));
         }
         std::string f = fold(body, "&", "");
         for (size_t i = xs.size(); i-- > 0;) f = ex(xs[i], f);
@@ -356,7 +349,7 @@ std::vector<Claim> claims(Program& p, const std::string& ns, std::vector<std::st
         NodeP wf = p.expand(p.wellformedness(inst), steps);
         std::vector<std::string> pn = w.open(info.params);
         out.push_back({ns + "." + info.text + "_wellformed", info.text + " is well formed: " + p.show(wf),
-                       w.close(info.params, pn, w.with(comps, w.formula(wf)))});
+                       w.numbers(w.close(info.params, pn, w.with(comps, w.formula(wf))))});
         for (FieldId f : p.name(info.structure).fields) {
             const ComponentDef& def = info.components.at(f);
             std::vector<std::pair<NameId, FieldId>> deps;
@@ -367,7 +360,7 @@ std::vector<Claim> claims(Program& p, const std::string& ns, std::vector<std::st
             std::string c = e.fresh("C");
             out.push_back({ns + "." + info.text + "_" + p.field(f).label + "_exists",
                            "the set " + info.text + "." + p.field(f).label + " exists",
-                           e.close(info.params, en, e.with(deps, ex(c, e.characterization(inst, f, c))))});
+                           e.numbers(e.close(info.params, en, e.with(deps, ex(c, e.characterization(inst, f, c)))))});
         }
     }
     for (const Theorem& t : p.theorems) {
@@ -388,7 +381,8 @@ std::vector<Claim> claims(Program& p, const std::string& ns, std::vector<std::st
                 w.alias(ps[k], it->second[k]->var);
             }
         }
-        out.push_back({ns + "." + t.name, p.show(claim), w.close(t.params, tn, w.with(components_of(p, insts), w.formula(claim)))});
+        out.push_back({ns + "." + t.name, p.show(claim),
+                       w.numbers(w.close(t.params, tn, w.with(components_of(p, insts), w.formula(claim))))});
     }
     return out;
 }

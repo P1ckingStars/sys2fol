@@ -284,14 +284,14 @@ std::string render(Program& p, const Source& spec, const std::vector<Decl>& form
         try {
             switch (e.kind) {
                 case Expected::Wellformed: {
-                    NodeP wf = d.formula(d.components(prefix(d, c.formula, e.inst), fields_of(p, e.inst)));
+                    NodeP wf = d.formula(d.components(prefix(d, d.numbers(c.formula), e.inst), fields_of(p, e.inst)));
                     if (!same(wf, p.expand(p.wellformedness(e.inst))))
                         throw Error({}, "it says " + p.show(wf) + ", not that " + p.name(e.inst).text + " is well formed");
                     said.push_back(c.name + ": " + p.name(e.inst).text + " is well formed.");
                     break;
                 }
                 case Expected::Exists:
-                    d.existence(d.components(prefix(d, c.formula, e.inst), deps(p, e.inst, e.field)), {e.inst, e.field});
+                    d.existence(d.components(prefix(d, d.numbers(c.formula), e.inst), deps(p, e.inst, e.field)), {e.inst, e.field});
                     said.push_back(c.name + ": the set " + comp_name(p, {e.inst, e.field}) + " exists.");
                     break;
                 case Expected::Theorem: {
@@ -304,7 +304,7 @@ std::string render(Program& p, const Source& spec, const std::vector<Decl>& form
                             for (const CompRef& r : fields_of(p, i)) comps.push_back(r);
                             if (!p.name(i).params.empty()) reuse = &p.names[i.v].params;
                         }
-                    FP body = d.params(c.formula, hints.theorems[e.theorem].params, p.theorems[e.theorem].params, reuse);
+                    FP body = d.params(d.numbers(c.formula), hints.theorems[e.theorem].params, p.theorems[e.theorem].params, reuse);
                     p.theorems[e.theorem].claim = d.formula(d.components(body, comps));
                     said.push_back(c.name + ": the theorem " + p.theorems[e.theorem].name + ", below.");
                     break;

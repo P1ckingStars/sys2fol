@@ -120,9 +120,9 @@ struct FamilyInfo {
     size_t sizes;
 };
 constexpr FamilyInfo kFamilies[] = {
-    {Family::canon, "canon", 1},     {Family::is_canon, "is_canon", 1}, {Family::below, "below", 2},
-    {Family::distinct, "distinct", 2}, {Family::num_cong, "num_cong", 1}, {Family::at, "at", 2},
-    {Family::at_fun, "at_fun", 2},   {Family::at_cong, "at_cong", 1},   {Family::rec_ex, "rec_ex", 1},
+    {Family::below, "below", 2},
+    {Family::distinct, "distinct", 2},
+    {Family::rec_ex, "rec_ex", 1},
     {Family::index_cases, "index_cases", 1},
 };
 
@@ -176,14 +176,8 @@ std::string Lemmas::instance(const Instance& in, const std::function<FmP()>& sta
 std::string Lemmas::prove_instance(const Instance& in) {
     const std::vector<uint64_t>& n = in.sizes;
     switch (in.family) {
-        case Family::canon: return canon(n[0]);
-        case Family::is_canon: return is_canon(n[0]);
         case Family::below: return below(n[0], n[1]);
         case Family::distinct: return distinct(n[0], n[1]);
-        case Family::num_cong: return num_cong(n[0]);
-        case Family::at: return at(n[0], n[1]);
-        case Family::at_fun: return at_fun(n[0], n[1]);
-        case Family::at_cong: return at_cong(n[0]);
         case Family::rec_ex: return rec_ex(n[0]);
         case Family::index_cases: return index_cases(n[0]);
     }
@@ -212,42 +206,6 @@ std::string Lemmas::header() const {
     std::string s = "# Written by sysprove: facts about numbers and records that proofs cite.\n";
     for (const auto& [name, f] : claims_) s += "\nclaim " + name + ": " + print(f) + "\n";
     return s;
-}
-
-std::string Lemmas::canon(uint64_t c) {
-    return instance({Family::canon, {c}},
-                [&] { return enc::chain(c, [&](const std::vector<std::string>& z) { return enc::num(c, z[c]); }); },
-                [&](Tac& t) {
-                    return intro_chain(t, c, [&](const std::vector<std::string>& z, const std::vector<H>& g) -> H {
-                        if (c == 0) return g[0];
-                        return intro_chain(t, c - 1, [&](const std::vector<std::string>& w, const std::vector<H>& gw) {
-                            std::vector<H> e = chains_equal(t, w, gw, z, g);
-                            H cong = t.inst(t.p.use("nsucc_CONG"), {z[c - 1], w[c - 1], z[c]});
-                            return t.mp(cong, {t.p.eq_sym(e[c - 1]), g[c]});
-                        });
-                    });
-                });
-}
-
-std::string Lemmas::is_canon(uint64_t c) {
-    auto statement = [&] {
-        std::string x = fresh("_x");
-        return all(x, imp(enc::num(c, x), enc::chain(c, [&](const std::vector<std::string>& z) {
-                              return atom("eq", {x, z[c]});
-                          })));
-    };
-    return instance({Family::is_canon, {c}}, statement, [&](Tac& t) {
-        return t.all("x", [&](const std::string& x) {
-            return t.assume(enc::num(c, x), [&](H num) {
-                return intro_chain(t, c, [&](const std::vector<std::string>& z, const std::vector<H>& g) {
-                    if (c == 0) return t.mp(t.inst(t.p.use("zero_UNIQ"), {x, z[0]}), {num, g[0]});
-                    H n = use_chain(t, num, std::vector<std::string>(z.begin(), z.begin() + c),
-                                    std::vector<H>(g.begin(), g.begin() + c));
-                    return t.mp(t.inst(t.p.use("nsucc_UNIQ"), {z[c - 1], x, z[c]}), {n, g[c]});
-                });
-            });
-        });
-    });
 }
 
 std::string Lemmas::below(uint64_t c, uint64_t d) {
@@ -283,148 +241,26 @@ std::string Lemmas::distinct(uint64_t c, uint64_t d) {
     });
 }
 
-std::string Lemmas::num_cong(uint64_t c) {
-    if (c == 0) return "Sys.zero_cong";
-    auto statement = [&] {
-        std::string x = fresh("_x"), y = fresh("_y");
-        return all(x, all(y, imp(atom("eq", {x, y}), imp(enc::num(c, x), enc::num(c, y)))));
-    };
-    return instance({Family::num_cong, {c}}, statement, [&](Tac& t) {
-        return intro_all(t, 2, "x", [&](const std::vector<std::string>& v) {
-            const std::string &x = v[0], &y = v[1];
-            return t.assume(atom("eq", {x, y}), [&](H heq) {
-                return t.assume(enc::num(c, x), [&](H hx) -> H {
-                    return intro_chain(t, c - 1, [&](const std::vector<std::string>& w, const std::vector<H>& g) {
-                        const std::string& n = w[c - 1];
-                        H ux = succ_unfold(t, n, x, use_chain(t, hx, w, g));
-                        H body = t.all("u", [&](const std::string& u) {
-                            H a = t.inst(ux, {u});
-                            H cr = t.mp(t.inst(t.p.use("cong_elem_r"), {u, x, y}), {heq});
-                            FmP d = t.p.fm(a)->b;
-                            H l = t.assume(atom("elem", {u, y}), [&](H h) { return t.p.iff_l(a, t.p.iff_r(cr, h)); });
-                            H r = t.assume(d, [&](H h) { return t.p.iff_l(cr, t.p.iff_r(a, h)); });
-                            return t.p.iff_intro(l, r);
-                        });
-                        return t.p.iff_r(t.inst(t.p.use("nsucc_def"), {n, y}), body);
-                    });
-                });
-            });
-        });
-    });
-}
-
-std::string Lemmas::at(size_t k, size_t i) {
-    auto statement = [&] {
-        std::string r = fresh("_r");
-        std::vector<std::string> xs = names("_x", k);
-        std::vector<std::string> vars{r};
-        vars.insert(vars.end(), xs.begin(), xs.end());
-        return all_of(vars, imp(enc::rec(r, xs), enc::at(i, xs[i], r)));
-    };
-    return instance({Family::at, {k, i}}, statement, [&](Tac& t) {
-        return intro_all(t, k + 1, "x", [&](const std::vector<std::string>& v) {
-            const std::string& r = v[0];
-            std::vector<std::string> xs(v.begin() + 1, v.end());
-            return t.assume(enc::rec(r, xs), [&](H rec) {
-                return intro_chain(t, i, [&](const std::vector<std::string>& z, const std::vector<H>& g) {
-                    std::vector<std::string> zz = z;
-                    std::vector<H> gg = g;
-                    std::function<H()> extend = [&]() -> H {
-                        if (zz.size() == k + 1) return t.split(use_chain(t, rec, zz, gg), k + 1)[i + 1];
-                        return t.obtain(t.inst(t.p.use("nsucc_EX"), {zz.back()}), "c", [&](const std::string& m, H gm) {
-                            zz.push_back(m);
-                            gg.push_back(gm);
-                            H h = extend();
-                            zz.pop_back();
-                            gg.pop_back();
-                            return h;
-                        });
-                    };
-                    return extend();
-                });
-            });
-        });
-    });
-}
-
-std::string Lemmas::at_fun(size_t k, size_t i) {
-    auto statement = [&] {
-        std::string r = fresh("_r"), v = fresh("_v");
-        std::vector<std::string> xs = names("_x", k);
-        std::vector<std::string> vars{r};
-        vars.insert(vars.end(), xs.begin(), xs.end());
-        vars.push_back(v);
-        return all_of(vars, imp(enc::rec(r, xs), imp(enc::at(i, v, r), atom("eq", {v, xs[i]}))));
-    };
-    return instance({Family::at_fun, {k, i}}, statement, [&](Tac& t) {
-        return intro_all(t, k + 2, "x", [&](const std::vector<std::string>& vs) {
-            const std::string& r = vs[0];
-            const std::string& v = vs[k + 1];
-            std::vector<std::string> xs(vs.begin() + 1, vs.begin() + 1 + k);
-            return t.assume(enc::rec(r, xs), [&](H rec) {
-                return t.assume(enc::at(i, v, r), [&](H hat) {
-                    return canonical(t, k, [&](const std::vector<std::string>& z, const std::vector<H>& g) {
-                        std::vector<H> parts = t.split(use_chain(t, rec, z, g), k + 1);
-                        H pv = use_chain(t, hat, std::vector<std::string>(z.begin(), z.begin() + i + 1),
-                                         std::vector<H>(g.begin(), g.begin() + i + 1));
-                        H td = t.p.iff_l(t.inst(t.p.use("tuple_def"), {r, z[k]}), parts[0]);
-                        H fun = t.split(td, 4)[3];
-                        return t.mp(t.inst(fun, {z[i], v, xs[i]}), {pv, parts[i + 1]});
-                    });
-                });
-            });
-        });
-    });
-}
-
-std::string Lemmas::at_cong(size_t i) {
-    auto statement = [&] {
-        std::string r = fresh("_r"), r2 = fresh("_r"), v = fresh("_v");
-        return all(r, all(r2, all(v, imp(atom("eq", {r, r2}), imp(enc::at(i, v, r), enc::at(i, v, r2))))));
-    };
-    return instance({Family::at_cong, {i}}, statement, [&](Tac& t) {
-        return intro_all(t, 3, "x", [&](const std::vector<std::string>& vs) {
-            const std::string &r = vs[0], &r2 = vs[1], &v = vs[2];
-            return t.assume(atom("eq", {r, r2}), [&](H heq) {
-                return t.assume(enc::at(i, v, r), [&](H hat) {
-                    return intro_chain(t, i, [&](const std::vector<std::string>& z, const std::vector<H>& g) {
-                        H pv = use_chain(t, hat, z, g);
-                        H pd = t.p.iff_l(t.inst(t.p.use("pmem_def"), {z[i], v, r}), pv);
-                        return t.obtain(pd, "p", [&](const std::string& p, H body) {
-                            std::vector<H> kp = t.split(body, 2);
-                            H ep = t.mp(t.inst(t.p.use("elem_second"), {r, r2, p}), {heq, kp[1]});
-                            H w = t.witness(t.p.and_intro(kp[0], ep), p);
-                            return t.p.iff_r(t.inst(t.p.use("pmem_def"), {z[i], v, r2}), w);
-                        });
-                    });
-                });
-            });
-        });
-    });
-}
-
 std::string Lemmas::rec_ex(size_t k) {
     std::string tc = tuple_cong2(), pc = pmem_cong1();
     auto statement = [&] {
-        std::vector<std::string> xs = names("_x", k);
-        std::string r = fresh("_r");
-        return all_of(xs, some(r, enc::rec(r, xs)));
+        return enc::chain(k, [&](const std::vector<std::string>& z) {
+            std::vector<std::string> xs = names("_x", k);
+            std::string r = fresh("_r");
+            return all_of(xs, some(r, enc::rec(r, xs, z)));
+        });
     };
     return instance({Family::rec_ex, {k}}, statement, [&](Tac& t) {
-        return intro_all(t, k, "x", [&](const std::vector<std::string>& xs) {
-            return canonical(t, k, [&](const std::vector<std::string>& z, const std::vector<H>& g) {
+        return intro_chain(t, k, [&](const std::vector<std::string>& z, const std::vector<H>& g) {
+            return intro_all(t, k, "x", [&](const std::vector<std::string>& xs) {
                 H tz = t.mp(t.p.forall_elim(t.p.use("tuple_zero"), z[0]), {zero_unfold(t, z[0], g[0])});
                 std::vector<H> pm;
                 std::function<H(size_t, const std::string&, H)> build = [&](size_t j, const std::string& r, H tup) -> H {
                     if (j == k) {
-                        H rec = intro_chain(t, k, [&](const std::vector<std::string>& w, const std::vector<H>& gw) {
-                            std::vector<H> e = chains_equal(t, z, g, w, gw);
-                            std::vector<H> parts{t.mp(t.inst(t.p.use(tc), {r, z[k], w[k]}), {e[k], tup})};
-                            for (size_t l = 0; l < k; ++l)
-                                parts.push_back(t.mp(t.inst(t.p.use(pc), {z[l], w[l], xs[l], r}), {e[l], pm[l]}));
-                            return t.join(parts);
-                        });
-                        return t.witness(rec, r);
+                        std::vector<H> parts{tup};
+                        parts.insert(parts.end(), pm.begin(), pm.end());
+                        std::string rv = fresh("_r");
+                        return t.witness(some(rv, enc::rec(rv, xs, z)), r, t.join(parts));
                     }
                     H sx = t.inst(t.p.use("snoc_EX"), {r, z[j], xs[j]});
                     return t.obtain(sx, "s", [&](const std::string& s, H snoc) {
@@ -486,7 +322,7 @@ H cong_atom(Tac& t, Lemmas& lm, H h, size_t k, const std::string& y, H exy) {
     };
     if (p == "elem") return k == 0 ? use("elem_first_subst", {x, y, A[1]}, {exy, h}) : use("elem_second", {x, y, A[0]}, {exy, h});
     if (p == "eq") return k == 0 ? use("eq_trans", {y, x, A[1]}, {t.p.eq_sym(exy), h}) : use("eq_trans", {A[0], x, y}, {h, exy});
-    if (p == "zero") return use(lm.num_cong(0), {x, y}, {exy, h});
+    if (p == "zero") return use(lm.zero_cong(), {x, y}, {exy, h});
     if (p == "Sys.natural") return use(lm.nat_cong(), {x, y}, {exy, h});
     if (p == "tuple") return k == 0 ? use(lm.tuple_cong1(), {x, y, A[1]}, {exy, h}) : use(lm.tuple_cong2(), {A[0], x, y}, {exy, h});
     if (p == "pmem") {

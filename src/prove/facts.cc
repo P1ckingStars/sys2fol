@@ -147,7 +147,10 @@ H Facts::prove(const FmP& f) {
             break;
         default: break;
     }
-    throw std::runtime_error("no proof from the steps at hand of " + print(f).substr(0, 300));
+    std::string at_hand;
+    if (getenv("SYSPROVE_FULL"))
+        for (H h : facts_) at_hand += "\n  " + print(t_.p.fm(h)).substr(0, 300);
+    throw std::runtime_error("no proof from the steps at hand of " + print(f).substr(0, getenv("SYSPROVE_FULL") ? std::string::npos : 300) + at_hand);
 }
 
 std::optional<H> Facts::contradiction() {

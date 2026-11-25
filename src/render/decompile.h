@@ -25,6 +25,8 @@ public:
     void characterization(const FP& f, CompRef comp, int c);
     // `exists c. (set(c) & forall q. (q in c <-> ...))`: some set is `comp`.
     void existence(const FP& f, CompRef comp);
+    // The numbers a claim names at its top, each read as its value; returns the rest of the claim.
+    FP numbers(const FP& f);
     // The leading parameters of a claim, as `hints` names them: each a fresh variable over the type the claim gives it.
     FP params(const FP& f, const std::vector<VarId>& hints, std::vector<VarId>& out, const std::vector<VarId>* reuse);
     NodeP formula(const FP& f);
@@ -35,6 +37,7 @@ private:
     Program& p_;
     const Program& hints_;
     std::map<std::string, NameId> externs_, types_;
+    std::map<int, uint64_t> nums_;
 
     NodeP term(int v, const FP& where) const;
     NodeP predicate(const FP& f);

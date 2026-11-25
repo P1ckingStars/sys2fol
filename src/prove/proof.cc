@@ -172,7 +172,7 @@ H Proof::forall_intro(H b) {
 std::pair<std::string, H> Proof::exists_elim(H ex, const std::string& hint) {
     check(ex, "exists_elim");
     const FmP& f = fm(ex);
-    if (f->k != Fm::Exists) fail("exists_elim of " + name(ex) + ", which is no exists");
+    if (f->k != Fm::Exists) fail("exists_elim of " + name(ex) + ", which is no exists: " + print(f).substr(0, 200));
     std::string w = fresh(hint);
     scopes_.push_back({Scope::Exists, next_scope_++, w, nullptr});
     var_scope_[w] = scopes_.back().id;
@@ -203,7 +203,7 @@ H Proof::implies_elim(H i, H a) {
     check(i, "implies_elim");
     check(a, "implies_elim");
     const FmP& f = fm(i);
-    if (f->k != Fm::Imp) fail("implies_elim of " + name(i) + ", which is no implication");
+    if (f->k != Fm::Imp) fail("implies_elim of " + name(i) + ", which is no implication: " + print(f).substr(0, 200));
     if (!alpha_eq(f->a, fm(a)))
         fail("implies_elim: " + name(a) + " is " + print(fm(a)).substr(0, 300) + ", not " + print(f->a).substr(0, 300));
     std::set<int> deps = steps_[i.id].deps;
