@@ -87,7 +87,7 @@ lemma files were 5,231. A spec in no project proves its own instances in its lem
 | Layer | Holds | State |
 |---|---|---|
 | lattice | Knaster–Tarski: `Fixedpt.lfp`, `gfp`, `induct`, `coinduct`, `gfp_unfold` | in `@zf//:ZF.Fixedpt` |
-| systems | the predicates of §3, the bridge, the invariance rule, simulation, composition, and the tuple lemmas they need (composing relations, the product S1×S2) | `math/systems/`: well-formedness, steps, `reach`, `bisim`, Part A checked (§7), and the facts sysprove's proofs cite, `tuple_facts` and `natural_facts` (decision 21); composition and the tuple lemmas beyond Part A's to build |
+| systems | the predicates of §3, the bridge, the invariance rule, simulation, composition, and the tuple lemmas they need (composing relations, the product S1×S2) | `math/systems/`: well-formedness, steps, `reach`, `bisim`, Part A checked (§7), and the facts sysprove's proofs cite, `tuple_facts` and `natural_facts` (decision 21); composition, the tuple lemmas beyond Part A's, and the doubling and word theories of decision 23 to build |
 | systems as values | "M is the system (S, A, B, step, Init)", predicates on M defined through the systems layer's, and each of its theorems restated once over M: for theorems over a varying number of systems, such as compositional refinement | to build |
 | circuits | bits as sets, tuples of bits, the set of all states, and the reduction of obligations to SAT: the theory rtl2fol's claims cite (rtl2fol `DESIGN.md`, decision 2) | to build |
 | generic | the same for every functor F, F a class | to build |
@@ -194,11 +194,13 @@ fol-zfc-comb-lib's checker and library:
 3. `BoundedQueue` and `queue_within_capacity`: sequences, natural numbers and an abstract type.
 
 Step 1's compiler is `sysc` (`src/lang`, `src/tools`), with the library's first part in `library/systems.sys`; the
-Crossing's seven claims compile in fol-zfc (`//test/crossing:claims`). Its encodings, for the user to decide: a claim
+Crossing's seven claims compile in fol-zfc (`//test/crossing:claims`). Its claim shape, for the user to decide: a claim
 about a system quantifies over the system's sets, each characterized by its members, and one claim per set states that
-it exists; an enum's cases are the numbers 0, 1, …; a record is a tuple written as `Sys.tuple2` and `Sys.tuple4` write
-theirs, and the empty record is 0; a step relation is bounded only by its state and input sets, so `Sys.wellformed`
-owes that every rule stays in its types; `extern` names a library predicate in the library's own text.
+it exists; a step relation is bounded only by its state and input sets, so `Sys.wellformed` owes that every rule stays
+in its types. Its data, as decision 23 keeps them: an enum's cases are the numbers 0, 1, …; a record is a tuple written
+as `Sys.tuple2` and `Sys.tuple4` write theirs, and the empty record is 0; `extern` names a library predicate in the
+library's own text. A claim still restates each number at every mention, where decision 23 constructs it once at the
+claim's top: that is to build.
 
 Step 1's renderer is `sysrender` (`src/render`). It links fol-zfc's parser and not `sysc`'s writer: it reads each claim
 as fol-zfc parses it and inverts the writer's encoding pattern by pattern, refusing any other shape. Instances and
@@ -232,14 +234,15 @@ well-formedness, proved first.
 
 Step 3's statements: `sysc` and `sysrender` carry `BoundedQueue` and `queue_within_capacity` (`test/queue`). Its seven
 claims compile in fol-zfc and read back as the spec, token for token; thirteen mistakes seeded into the new encodings
-each fail the round trip or stop `sysc`. Its encodings, for the user to decide with L4: a module's and a theorem's
+each fail the round trip or stop `sysc`. Its claim shape, for the user to decide with L4: a module's and a theorem's
 parameters are quantified first in each of their claims, one whose type a library predicate gives (`extern type nat =
-"Sys.natural"`) with that predicate as a hypothesis; `sequence of T` is an index tuple of a natural length with its
-entries in T (decision 12), `[]` the empty tuple and `[x]` a tuple of one; `length(q)` is the n with tuple(q, n),
-`first(q)` the entry at index 0, `rest(q)` the tuple with every entry one index down, none for `[]`, and `q ++ [x]` is
-snoc; `<` and `≤` on natural numbers are ∈ and ∈ or =; an enum whose cases carry fields is the set of pairs ⟨case
-number, record of its fields⟩, its case names global; a rule's pattern binds a field's value by an existential over the
-field's type, around the whole rule; `length`, `first` and `rest` are built into the compiler. A theorem applies an
+"Sys.natural"`) with that predicate as a hypothesis. Its data, as decision 23 keeps them: `sequence of T` is an index
+tuple of a natural length with its entries in T (decision 12), `[]` the empty tuple and `[x]` a tuple of one;
+`length(q)` is the n with tuple(q, n), `first(q)` the entry at index 0, `rest(q)` the tuple with every entry one index
+down, none for `[]`, and `q ++ [x]` is snoc; `<` and `≤` on natural numbers are ∈ and ∈ or =; an enum whose cases carry
+fields is the set of pairs ⟨case number, record of its fields⟩, its case names global; a rule's pattern binds a field's
+value by an existential over the field's type, around the whole rule. `length`, `first` and `rest` are built into the
+compiler, where decision 23 makes them the prelude's extern functions: that is to build. A theorem applies an
 instance to its own parameters, in order, and only so yet. The renderer takes the source's order of a rule's equations
 and its spelling of a reversed comparison (`a ≥ b` for `b ≤ a`) as hints, where they fit the claim. L3's `none` for an
 output a rule does not mention is not built: `sysc` refuses such a rule.
@@ -296,6 +299,7 @@ LRAT's RAT steps.
 | 20 | Proof compression is a standalone machine, and every proof a machine writes goes through it before `proof_checker`: fol-zfc-comb-lib's `src/machines/compress`, beside the class machine, on the checker's public replay. It drops the steps no kept step reads, reads each held fact from the step that set it, and writes short names and only the parentheses needed. The class machine runs it in process; sysprove's proofs go through `fol_compressed_proof` (the user, 2026-11-24) | A proof's size is what the checker parses and what a customer stores and checks again. One machine serves every writer, rtl2fol's included, where each writer would otherwise write its own pass; inside fol-zfc-comb-lib the class machine reaches it, and the checker's tree stays as it is. It is untrusted: each rewritten block is checked before it is kept. |
 | 21 | A fact whose statement holds whatever the spec is lives in the systems library, proved once, and every proof a machine writes cites it, never proving it again. The 23 sysprove proved in each spec are `math/systems`' `tuple_facts` and `natural_facts`, with the proofs sysprove wrote, shortened by the compression machine, and base's `g3_pmem_cong1`. A fact whose proof depends on the task, one indexed by a record's arity or a numeral, belongs to the proof generation, which writes it the first time a proof needs it and cites it from then on, so that it is proved once (the user, 2026-11-24) | Every later use of a machine cites such a fact instead of proving it on the instance, as programs use C++'s standard library. These facts were 35% of what sysprove wrote per spec, and 20 were proved identically in both specs. A first-order sentence quantifies a fixed number of values, so a fact over a record of k fields is one sentence per k: base holds the size-free tuple theory, and an instance at a size is part of the proof that needs it. No proof was written by hand: sysprove wrote them, and those on the natural numbers rest on ZF's through `Sys.natural_nat` (decision 18). |
 | 22 | The instances a project's specs cite are proved once for the project: each spec's sysprove run states and lists the instances it cites, and the project's run proves their union in one file, which every spec's checks load; a spec in no project proves its own (the user, 2026-11-24, after the design was written into §4) | Decision 21 has the proof generation cache what it proves so that nothing is proved twice, and specs in one build share sizes: `BoundedQueue` and `Crossing` proved 15 instances alike. Per-spec runs keep each spec's generation incremental and parallel, where one run for the whole project would regenerate every spec on any edit; Bazel cannot declare a target per instance, since only sysprove's run learns which instances a spec needs. |
+| 23 | Numbers have one encoding, the von Neumann naturals. A claim constructs each number it uses once, at its top: a variable with its defining atoms as hypotheses, one name for every use. Positions and enum cases are built by successor steps; other values by doubling steps (`Sys.double`, `Sys.double_succ`). `nat` is unbounded. `int(w)` and `uint(w)` are ℤ/2^wℤ on the naturals below 2^w; `int(w)` is signed in two's complement and `uint(w)` unsigned. `int8` … `int64`, and `int` as `int32`, are type aliases in the prelude. The language gains extern types with parameters, extern functions each resting on the library's totality and uniqueness theorems, and operators chosen by their operands' types. A range `0 ..< n` is `x ∈ n`. Records, enums, enums with fields, sequences and the order on `nat` stay encoded as they are (the user, 2026-11-24; `LANGUAGE.md`, L4 numbers) | A number's construction, not its encoding, sets the proof's size. Restated at every mention, numbers took 491 of the two specs' 869 quantifiers, and 1,194 of the project's 2,083 instance lines only stepped through them; a literal 10000 took 10,001 atoms, and a circuit of n latches about n²/2. Constructed once, the specs need 48: successor steps give each position, every one of which a claim uses, in one atom, and doubling steps give a value in one atom per bit, 10000 in 15. One theory of ℤ/2^wℤ, proved once for every w, serves machine integers of every width and rtl2fol's signals, and lets a theorem hold for every width. The extensions let the prelude declare the number types, so the compiler knows none by name. |
 
 ## 10. Open, for the user
 
@@ -304,6 +308,7 @@ LRAT's RAT steps.
   every reachable state, or a liveness claim holds vacuously, as an unproved wf would make a safety claim hold.
 - The systems layer first, or the generic layer first.
 - A counterexample: checked by evaluation, or proved in fol-zfc as the claim's negation.
-- The arithmetic a spec ranges over: ℤ (in the library), ℚ or ℝ (not yet).
+- The arithmetic beyond `nat`, `int(w)` and `uint(w)` (decision 23): ℤ unbounded, ZF's `int` behind a bridge; ℚ or ℝ
+  (not yet).
 
 Tools needed: CaDiCaL (LRAT), abc (PDR), cvc5.
